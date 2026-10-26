@@ -2,6 +2,11 @@
   "name": "ridian",
   "version": "1.0.0",
   "description": "Ridian · Daily tasks",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MonadWorks/ridian.git"
+  },
   "private": true,
   "main": "desktop/main.cjs",
   "scripts": {

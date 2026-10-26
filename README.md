@@ -106,8 +106,12 @@ print(urllib.request.urlopen(request).read().decode())
 
 ## 开发与检查
 
+需要 Node.js 22.12 或更新版本。桌面打包面向 Apple Silicon macOS。
+
 ```sh
-npm install
+git clone https://github.com/MonadWorks/ridian.git
+cd ridian
+npm ci
 npm test
 npm start
 # 独立运行桌面 + 网页交互检查（先退出日点，避免端口冲突）
@@ -118,3 +122,7 @@ npm run package
 `npm run build` 生成可部署的 `dist/`，无运行时第三方依赖。桌面使用 Electron，静态前端使用原生 JS 与 CSS。`desktop/cloud.json` 保存允许读取本机数据的在线记录页地址；更换部署域名后需要更新该文件并重新打包。
 
 程序是本机制作的 Apple Silicon macOS 应用，未进行 Apple 公证；在此电脑上本地构建与运行。分发到其他电脑前需按 Apple 要求签名、公证。
+
+## 许可证
+
+[MIT](LICENSE)。

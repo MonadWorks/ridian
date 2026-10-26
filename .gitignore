@@ -6,4 +6,14 @@ dist/
 test-results/
 *.log
 .DS_Store
-.vercel
+.env
+.env.*
+!.env.example
+connection.json
+journal.json
+preferences.json
+backups/
+*.pem
+*.key
+*.p12
+*.pfx
