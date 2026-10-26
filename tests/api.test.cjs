@@ -1,0 +1,19 @@
+const {test}=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');const path=require('node:path');const os=require('node:os');const http=require('node:http');
+const {createService}=require('../lib/server.cjs');
+test('authenticated API separates reads and writes, blocks hostile origins, and supports AI recurrence',async t=>{
+  const directory=fs.mkdtempSync(path.join(os.tmpdir(),'ridian-api-'));
+  const service=createService({directory,webRoot:path.join(__dirname,'../web'),port:0,allowedOrigins:['https://ridian.example']});const port=await service.start();
+  t.after(()=>{service.server.close();fs.rmSync(directory,{recursive:true,force:true});});
+  const base=`http://127.0.0.1:${port}`;
+  const call=(route,token,method='GET',body,extra={})=>fetch(base+route,{method,headers:{...(token?{Authorization:`Bearer ${token}`} :{}),'Content-Type':'application/json',...extra},...(body===undefined?{}:{body:JSON.stringify(body)})});
+  assert.equal((await call('/api/v1/history')).status,401);
+  assert.equal((await call('/api/v1/tasks',service.credentials.readToken,'POST',{title:'unwanted'})).status,403);
+  assert.equal((await call('/api/v1/history',service.credentials.readToken,'GET',undefined,{Origin:'https://evil.example'})).status,403);
+  const allowed=await call('/api/v1/history',service.credentials.readToken,'GET',undefined,{Origin:'https://ridian.example'});assert.equal(allowed.status,200);assert.equal(allowed.headers.get('access-control-allow-origin'),'https://ridian.example');
+  const created=await call('/api/v1/tasks',service.credentials.writeToken,'POST',{title:'AI 加入的复习',priority:'high'});assert.equal(created.status,200);const task=await created.json();
+  const done=await call(`/api/v1/tasks/${task.id}`,service.credentials.writeToken,'PATCH',{done:true});assert.equal((await done.json()).completedDate,service.store.today());
+  const rule=await call('/api/v1/strategies',service.credentials.writeToken,'POST',{title:'间隔复习',schedule:{type:'interval',everyDays:2}});assert.equal(rule.status,200);
+  const today=await (await call('/api/v1/today',service.credentials.readToken)).json();assert.equal(today.tasks.length,2);
+  const invalid=await call('/api/v1/tasks',service.credentials.writeToken,'POST',{title:'bad',date:'2026-02-30'});assert.equal(invalid.status,400);
+  const forged=await new Promise(resolve=>{const req=http.get(base+'/api/v1/history',{headers:{Host:'evil.example',Authorization:`Bearer ${service.credentials.readToken}`}},res=>{res.resume();resolve(res.statusCode);});req.on('error',()=>resolve(0));});assert.equal(forged,403);
+});

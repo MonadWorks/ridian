@@ -1,0 +1,20 @@
+{
+  "name": "ridian",
+  "version": "1.0.0",
+  "description": "日点 · 留一点空间，给今天。",
+  "private": true,
+  "main": "desktop/main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "dev": "node scripts/serve.cjs",
+    "test": "node --test tests/*.test.cjs",
+    "build": "node scripts/build.cjs",
+    "package": "npm run build && electron-packager . 日点 --platform=darwin --arch=arm64 --out=release --overwrite --icon=assets/icon.icns --app-bundle-id=app.ridian.desktop --app-category-type=public.app-category.productivity --ignore='^/(release|tests|docs|scripts|[.]git|[.]vercel|node_modules|dist)(/|$)' && codesign --force --deep --sign - 'release/日点-darwin-arm64/日点.app'"
+  },
+  "devDependencies": {
+    "electron": "45.0.0",
+    "@electron/packager": "20.3.0",
+    "@playwright/test": "1.58.2",
+    "vercel": "latest"
+  }
+}

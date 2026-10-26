@@ -1,0 +1,11 @@
+desktop/
+lib/
+tests/
+release/
+assets/
+node_modules/
+.test-data/
+test-results/
+.git/
+README.md
+.impeccable.md

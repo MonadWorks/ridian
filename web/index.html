@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#fafbf7"><meta name="description" content="日点，让每一天的进展有迹可循。"><title>日点 · 每日记录</title><link rel="icon" type="image/svg+xml" href="favicon.svg"><link rel="stylesheet" href="journal.css"><script type="module" src="journal.js"></script></head>
+<body>
+<div class="page">
+  <header class="topbar"><a class="brand" href="/" aria-label="日点首页"><span class="brand-dot" aria-hidden="true"></span><span>日点</span><span class="brand-en">RIDIAN</span></a><span id="connection-state" class="connection-state"><i></i>正在连接</span></header>
+  <main>
+    <section class="intro"><div><p class="eyebrow">A LITTLE, EVERY DAY</p><h1>日子有迹可循<span>。</span></h1><p class="subtitle">做完的小事，慢慢成为生活的形状。</p></div><div class="today-stamp"><span id="stamp-month"></span><strong id="stamp-day"></strong><span id="stamp-weekday"></span></div></section>
+    <section id="connection-panel" class="connection-panel" hidden>
+      <div><h2>把今天，接到这里。</h2><p>打开 Mac 上的日点，在「···」菜单中选择记录页。<br>清单保存在你的电脑上，这里只展示你的记录。</p></div>
+      <div class="connection-actions"><button id="retry" class="primary">重新连接 <span>↗</span></button><button id="demo" class="quiet-button">先看看示例</button></div>
+    </section>
+    <div id="notice" class="notice" role="status" hidden></div>
+    <section class="activity-section" aria-labelledby="activity-title">
+      <div class="section-heading"><h2 id="activity-title">日常的足迹</h2><div class="year-picker"><button id="previous-year" aria-label="上一年">‹</button><span id="year-label"></span><button id="next-year" aria-label="下一年">›</button></div></div>
+      <div class="activity-scroll"><div class="activity-inner"><div id="month-labels" class="month-labels"></div><div class="activity-body"><div class="weekday-labels"><span>一</span><span>三</span><span>五</span><span>日</span></div><div id="heatmap" class="heatmap" aria-label="每日完成事项热力图"></div></div></div></div>
+      <div class="activity-caption"><p id="year-summary">还没有记录，今天就是一个好的开始。</p><div class="legend" aria-label="完成数量颜色从少到多"><span>少</span><i class="level-0"></i><i class="level-1"></i><i class="level-2"></i><i class="level-3"></i><i class="level-4"></i><span>多</span></div></div>
+    </section>
+    <section class="journal-section">
+      <aside class="journal-aside"><p class="eyebrow">THE DAILY PAGES</p><h2>一日一页</h2><p>每一个小小的完成，<br>都算数。</p><button id="back-today" class="today-button">回到今天 <span>↗</span></button></aside>
+      <div class="day-page"><div class="day-heading"><div><h3 id="selected-title"></h3><p id="selected-subtitle"></p></div><div class="day-navigation"><button id="previous-day" aria-label="前一天">‹</button><label class="date-control" title="选择日期"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="4.5" width="14" height="13" rx="2"/><path d="M6 2.5v4m8-4v4M3 9h14"/></svg><input id="date-picker" type="date" aria-label="选择记录日期"></label><button id="next-day" aria-label="后一天">›</button></div></div>
+      <ul id="day-tasks" class="day-tasks"></ul><div id="day-empty" class="day-empty"><span class="empty-mark" aria-hidden="true">·</span><p>这一天，还留着空白。</p><span>在桌面上写下一件事，从那里开始。</span></div>
+      <div id="day-footnote" class="day-footnote"></div></div>
+    </section>
+  </main>
+  <footer class="page-footer"><span>留一点空间，给今天。</span><details id="data-details"><summary>数据与连接</summary><div class="data-panel"><p>记录保存在 Mac。在线页面通过本机接口读取；关闭桌面端后显示最近的快照。</p><div class="data-actions"><button id="export" class="quiet-button">导出 JSON</button><label class="quiet-button import-label">打开备份<input id="import" type="file" accept="application/json,.json"></label><button id="disconnect" class="quiet-button">断开连接</button></div><form id="connect-form"><label for="connection-key">本机只读密钥</label><div><input id="connection-key" type="password" placeholder="从日点 → AI 接口复制" autocomplete="off"><button type="submit">连接</button></div></form></div></details></footer>
+</div>
+<div id="toast" class="toast" role="status" hidden></div>
+</body></html>
