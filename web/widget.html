@@ -1,20 +1,20 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>日点 · 今天</title><link rel="stylesheet" href="widget.css"><script type="module" src="widget.js"></script></head>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ridian · Today</title><link rel="stylesheet" href="widget.css"><script type="module" src="widget.js"></script></head>
 <body>
 <main id="widget" class="widget">
-  <button id="orb" class="orb" aria-label="展开今日清单" title="点击展开 · 拖动移动">
+  <button id="orb" class="orb" aria-label="Open today" title="Click to open · Drag to move">
     <svg class="orb-ring" viewBox="0 0 60 60" aria-hidden="true"><circle class="ring-track" cx="30" cy="30" r="26"/><circle id="progress-ring" class="ring-value" cx="30" cy="30" r="26"/></svg>
     <span id="orb-number">·</span>
   </button>
-  <section class="sheet" aria-label="今日待办" hidden>
+  <section class="sheet" aria-label="Today" hidden>
     <header class="sheet-header" id="drag-handle">
-      <div><p id="today-date" class="eyebrow"></p><h1>今天<span class="heading-dot">.</span></h1></div>
-      <button id="collapse" class="icon-button" aria-label="收起清单" title="收起 · Esc"><svg viewBox="0 0 20 20"><path d="M5 10h10"/></svg></button>
+      <div><p id="today-date" class="eyebrow"></p><h1>Today<span class="heading-dot">.</span></h1></div>
+      <button id="collapse" class="icon-button" aria-label="Collapse" title="Collapse · Esc"><svg viewBox="0 0 20 20"><path d="M5 10h10"/></svg></button>
     </header>
-    <div class="list-scroll"><ul id="tasks" class="tasks"></ul><div id="empty" class="empty"><span class="empty-orbit" aria-hidden="true">·</span><p>给今天留一点空间。</p><span>写下一件想做的小事</span></div></div>
-    <form id="add-form" class="add-form"><span aria-hidden="true">+</span><input id="task-input" placeholder="添加一件事…" aria-label="添加一件事" maxlength="240" autocomplete="off"><button type="submit" class="enter-key" aria-label="添加事项" title="回车添加">↵</button></form>
+    <div class="list-scroll"><ul id="tasks" class="tasks"></ul><div id="empty" class="empty"><span class="empty-orbit" aria-hidden="true">·</span></div></div>
+    <form id="add-form" class="add-form"><span aria-hidden="true">+</span><input id="task-input" placeholder="Add a task…" aria-label="Add a task" maxlength="240" autocomplete="off"><button type="submit" class="enter-key" aria-label="Add task" title="Enter to add">↵</button></form>
     <p id="error" class="error" role="alert" hidden></p>
-    <footer><button id="history" class="text-button" title="查看每日记录"><svg viewBox="0 0 16 16"><path d="M3 12V9m5 3V4m5 8V7"/></svg><span id="progress-label">今天，慢慢来</span></button><button id="menu" class="menu-button" aria-label="更多选项" title="更多">···</button></footer>
+    <footer><button id="history" class="text-button" title="History" aria-label="History"><svg viewBox="0 0 16 16"><path d="M3 12V9m5 3V4m5 8V7"/></svg><span id="progress-label"></span></button><button id="menu" class="menu-button" aria-label="More" title="More">···</button></footer>
   </section>
 </main>
 <div id="announcement" class="sr-only" aria-live="polite"></div>

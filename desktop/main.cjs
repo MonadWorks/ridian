@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { createService, PORT } = require('../lib/server.cjs');
 const { atomicWrite } = require('../lib/store.cjs');
-app.setName('日点');
+app.setName('Ridian');
 const testing = process.env.RIDIAN_TEST === '1';
 const dataDir = process.env.RIDIAN_DATA_DIR || path.join(app.getPath('appData'), 'Ridian');
 app.setPath('userData', dataDir);
@@ -48,22 +48,22 @@ function openHistory(online = false) {
 }
 function showMenu() {
   const menu = Menu.buildFromTemplate([
-    { label: '今日清单', accelerator: 'CommandOrControl+Shift+Space', click: () => setExpanded(true) },
-    { label: '查看每日记录', click: () => openHistory() },
-    ...(cloudUrl ? [{ label: '在线记录页', click: () => openHistory(true) }] : []),
+    { label: 'Today', accelerator: 'CommandOrControl+Shift+Space', click: () => setExpanded(true) },
+    { label: 'History', click: () => openHistory() },
+    ...(cloudUrl ? [{ label: 'Online history', click: () => openHistory(true) }] : []),
     { type: 'separator' },
-    { label: 'AI 接口', submenu: [
-      { label: '复制只读接口配置', click: () => clipboard.writeText(JSON.stringify({ baseUrl: service.credentials.baseUrl, token: service.credentials.readToken, scope: 'read', endpoints: ['/api/v1/today', '/api/v1/history', '/api/v1/strategies'] }, null, 2)) },
-      { label: '复制读写接口配置', click: () => clipboard.writeText(JSON.stringify({ baseUrl: service.credentials.baseUrl, token: service.credentials.writeToken, scope: 'write', endpoints: ['/api/v1/tasks', '/api/v1/strategies'] }, null, 2)) }
+    { label: 'AI access', submenu: [
+      { label: 'Copy read-only config', click: () => clipboard.writeText(JSON.stringify({ baseUrl: service.credentials.baseUrl, token: service.credentials.readToken, scope: 'read', endpoints: ['/api/v1/today', '/api/v1/history', '/api/v1/strategies'] }, null, 2)) },
+      { label: 'Copy read & write config', click: () => clipboard.writeText(JSON.stringify({ baseUrl: service.credentials.baseUrl, token: service.credentials.writeToken, scope: 'write', endpoints: ['/api/v1/tasks', '/api/v1/strategies'] }, null, 2)) }
     ] },
-    { label: '导出记录…', click: async () => {
-      const result = await dialog.showSaveDialog({ defaultPath: `日点-${service.store.today()}.json`, filters: [{ name: 'JSON', extensions: ['json'] }] });
-      if (!result.canceled && result.filePath) { try { atomicWrite(result.filePath, service.store.snapshot()); } catch { dialog.showErrorBox('导出失败', '请选择一个可以写入的文件夹。'); } }
+    { label: 'Export…', click: async () => {
+      const result = await dialog.showSaveDialog({ defaultPath: `Ridian-${service.store.today()}.json`, filters: [{ name: 'JSON', extensions: ['json'] }] });
+      if (!result.canceled && result.filePath) { try { atomicWrite(result.filePath, service.store.snapshot()); } catch { dialog.showErrorBox('Export failed', 'Choose a writable folder.'); } }
     } },
-    { label: '打开数据文件夹', click: () => shell.openPath(dataDir) },
-    { label: '登录时启动', type: 'checkbox', checked: app.getLoginItemSettings().openAtLogin, enabled: app.isPackaged, click: item => app.setLoginItemSettings({ openAtLogin: item.checked }) },
+    { label: 'Data folder', click: () => shell.openPath(dataDir) },
+    { label: 'Open at login', type: 'checkbox', checked: app.getLoginItemSettings().openAtLogin, enabled: app.isPackaged, click: item => app.setLoginItemSettings({ openAtLogin: item.checked }) },
     { type: 'separator' },
-    { label: '退出日点', accelerator: 'CommandOrControl+Q', click: () => app.quit() }
+    { label: 'Quit Ridian', accelerator: 'CommandOrControl+Q', click: () => app.quit() }
   ]);
   menu.popup({ window: win });
 }
@@ -76,12 +76,12 @@ app.whenReady().then(async () => {
     service.store.materialize();
     scheduler = setInterval(() => { try { service.store.materialize(); } catch(e) { console.error('Schedule failed:', e.message); } }, 30000);
   } catch (e) {
-    dialog.showErrorBox('日点暂时无法启动', e.code === 'EADDRINUSE' ? `端口 ${PORT} 正被占用。请退出另一个日点实例后重试。` : e.message);
+    dialog.showErrorBox('Unable to start Ridian', e.code === 'EADDRINUSE' ? `Port ${PORT} is in use. Quit the other instance and retry.` : e.message);
     app.quit(); return;
   }
   const work = screen.getPrimaryDisplay().workArea;
   const position = preferences.position || { x: work.x + work.width - 112, y: work.y + 130 };
-  win = new BrowserWindow({ ...clamped({ ...position, width: 80, height: 80 }), show: false, frame: false, transparent: true, resizable: false, maximizable: false, fullscreenable: false, hasShadow: false, alwaysOnTop: true, skipTaskbar: true, backgroundColor: '#00000000', title: '日点', webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
+  win = new BrowserWindow({ ...clamped({ ...position, width: 80, height: 80 }), show: false, frame: false, transparent: true, resizable: false, maximizable: false, fullscreenable: false, hasShadow: false, alwaysOnTop: true, skipTaskbar: true, backgroundColor: '#00000000', title: 'Ridian', webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
   win.setAlwaysOnTop(true, 'floating');
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
@@ -108,8 +108,8 @@ app.whenReady().then(async () => {
     if (!validSender(event)) return;
     const task = service.store.snapshot().tasks.find(t => t.id === id); if (!task) return;
     Menu.buildFromTemplate([
-      { label: '优先级', enabled: false },
-      ...[['high', '优先做'], ['normal', '按平常'], ['low', '慢慢来']].map(([value,label]) => ({ label, type: 'radio', checked: (task.priority || 'normal') === value, click: () => { service.store.update(id, { priority: value }); win.webContents.send('window:expanded', expanded); } }))
+      { label: 'Priority', enabled: false },
+      ...[['high', 'High'], ['normal', 'Normal'], ['low', 'Low']].map(([value,label]) => ({ label, type: 'radio', checked: (task.priority || 'normal') === value, click: () => { service.store.update(id, { priority: value }); win.webContents.send('window:expanded', expanded); } }))
     ]).popup({ window: win });
   });
   ipcMain.on('window:history', event => { if (validSender(event)) openHistory(); });
@@ -122,11 +122,11 @@ app.whenReady().then(async () => {
   const trayImage = nativeImage.createFromPath(path.join(__dirname, '../assets/trayTemplate.png'));
   trayImage.setTemplateImage(true);
   tray = new Tray(trayImage);
-  tray.setToolTip('日点 · 今天，慢慢来');
+  tray.setToolTip('Ridian');
   tray.on('click', () => { setExpanded(!expanded); win.show(); });
   tray.on('right-click', showMenu);
   globalShortcut.register('CommandOrControl+Shift+Space', () => { setExpanded(!expanded); win.show(); });
-  Menu.setApplicationMenu(Menu.buildFromTemplate([{ label: '日点', submenu: [{ role: 'quit', label: '退出日点' }] }, { role: 'editMenu' }]));
+  Menu.setApplicationMenu(Menu.buildFromTemplate([{ label: 'Ridian', submenu: [{ role: 'quit', label: 'Quit Ridian' }] }, { role: 'editMenu' }]));
   await win.loadURL(`http://127.0.0.1:${PORT}/widget.html`);
   win.showInactive();
   updateOpacity();

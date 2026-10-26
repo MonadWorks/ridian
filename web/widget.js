@@ -1,7 +1,7 @@
 const api = window.ridian;
 const $ = id => document.getElementById(id);
 let expanded = false, snapshot = { tasks: [], today: '' }, busy = new Set(), refreshInFlight = false;
-const request = (method, path, body) => api ? api.request(method, path, body) : Promise.reject(new Error('请使用桌面版日点。'));
+const request = (method, path, body) => api ? api.request(method, path, body) : Promise.reject(new Error('Open the Ridian desktop app.'));
 function error(message = '') { $('error').hidden = !message; $('error').textContent = message; }
 function announce(message) { $('announcement').textContent = message; }
 function render(justDone) {
@@ -10,10 +10,10 @@ function render(justDone) {
   const pending = visible.filter(t => !t.completedAt).length;
   const done = visible.length - pending;
   $('orb-number').textContent = pending || (done ? '✓' : '·');
-  $('orb').setAttribute('aria-label', `展开今日清单，${pending} 件待办`);
+  $('orb').setAttribute('aria-label', `Open today, ${pending} pending`);
   $('progress-ring').style.strokeDashoffset = String(163.363 * (1 - (visible.length ? done / visible.length : 0)));
-  $('progress-label').textContent = done ? (pending ? `已完成 ${done} / ${visible.length}` : '今天的事，都做好了') : '今天，慢慢来';
-  $('today-date').textContent = new Date(`${snapshot.today || new Date().toLocaleDateString('en-CA')}T12:00:00`).toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' });
+  $('progress-label').textContent = visible.length ? `${done} / ${visible.length}` : '';
+  $('today-date').textContent = new Date(`${snapshot.today || new Date().toLocaleDateString('en-CA')}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', weekday: 'short' });
   $('empty').hidden = visible.length > 0;
   const fragment = document.createDocumentFragment();
   for (const task of visible) {
@@ -22,12 +22,11 @@ function render(justDone) {
     const check = document.createElement('button'); check.className = 'check'; check.setAttribute('role', 'checkbox'); check.setAttribute('aria-checked', !!task.completedAt); check.setAttribute('aria-label', task.title); check.disabled = busy.has(task.id);
     check.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 8 3 3 7-7"/></svg>';
     check.addEventListener('click', () => toggle(task));
-    const label = document.createElement('span'); label.className = 'task-text'; label.textContent = task.title; label.title = '双击编辑';
-    if (task.priority && task.priority !== 'normal') { const flag = document.createElement('button'); flag.className = `priority ${task.priority}`; flag.textContent = '·'; flag.title = task.priority === 'high' ? '优先做' : '慢慢来'; flag.setAttribute('aria-label', `${flag.title}，修改优先级`); flag.onclick = () => api?.taskMenu(task.id); li.append(flag); }
+    const label = document.createElement('span'); label.className = 'task-text'; label.textContent = task.title; label.title = 'Double-click to edit';
+    if (task.priority && task.priority !== 'normal') { const flag = document.createElement('button'); flag.className = `priority ${task.priority}`; flag.textContent = '·'; flag.title = task.priority === 'high' ? 'High' : 'Low'; flag.setAttribute('aria-label', `${flag.title}, change priority`); flag.onclick = () => api?.taskMenu(task.id); li.append(flag); }
     label.addEventListener('dblclick', () => edit(task, label));
-    if (!task.completedAt && task.date < snapshot.today) { const carry = document.createElement('span'); carry.className = 'carry'; carry.textContent = '接着做'; label.append(carry); }
-    const remove = document.createElement('button'); remove.className = 'delete'; remove.textContent = '×'; remove.setAttribute('aria-label', `删除 ${task.title}`);
-    remove.addEventListener('click', async () => { if (busy.has(task.id)) return; busy.add(task.id); try { await request('DELETE', `/api/v1/tasks/${task.id}`); await refresh(); announce('已删除事项'); } catch(e) { error(e.message); } finally { busy.delete(task.id); } });
+    const remove = document.createElement('button'); remove.className = 'delete'; remove.textContent = '×'; remove.setAttribute('aria-label', `Delete ${task.title}`);
+    remove.addEventListener('click', async () => { if (busy.has(task.id)) return; busy.add(task.id); try { await request('DELETE', `/api/v1/tasks/${task.id}`); await refresh(); announce('Task deleted'); } catch(e) { error(e.message); } finally { busy.delete(task.id); } });
     li.append(check, label, remove); fragment.append(li);
   }
   const focused = document.activeElement.closest?.('[data-id]')?.dataset.id;
@@ -45,13 +44,13 @@ async function toggle(task) {
   busy.add(task.id); const old = { ...task };
   task.completedAt = task.completedAt ? null : new Date().toISOString();
   render(task.completedAt ? task.id : null);
-  try { const saved = await request('PATCH', `/api/v1/tasks/${task.id}`, { done: !!task.completedAt }); Object.assign(task, saved); announce(saved.completedAt ? '完成了一件事' : '已恢复为待办'); error(); }
+  try { const saved = await request('PATCH', `/api/v1/tasks/${task.id}`, { done: !!task.completedAt }); Object.assign(task, saved); announce(saved.completedAt ? 'Completed' : 'Reopened'); error(); }
   catch(e) { Object.assign(task, old); render(); error(e.message); }
   finally { busy.delete(task.id); const button = $('tasks').querySelector(`[data-id="${task.id}"] .check`); if (button) button.disabled = false; }
 }
 function edit(task, label) {
   if (label.querySelector('input')) return;
-  const input = document.createElement('input'); input.className = 'edit-input'; input.value = task.title; input.maxLength = 240; input.setAttribute('aria-label', '编辑事项');
+  const input = document.createElement('input'); input.className = 'edit-input'; input.value = task.title; input.maxLength = 240; input.setAttribute('aria-label', 'Edit task');
   label.replaceChildren(input); input.focus(); input.select(); let committed = false;
   const finish = async cancel => { if (committed) return; committed = true; if (!cancel && input.value.trim() && input.value.trim() !== task.title) { try { await request('PATCH', `/api/v1/tasks/${task.id}`, { title: input.value }); } catch(e) { error(e.message); } } input.remove(); await refresh(); render(); };
   input.addEventListener('keydown', e => { if (e.isComposing) return; if (e.key === 'Enter') { e.preventDefault(); finish(false); } if (e.key === 'Escape') { e.stopPropagation(); finish(true); } });
@@ -76,7 +75,7 @@ $('widget').addEventListener('mouseleave', () => api?.hover(false));
 $('add-form').addEventListener('submit', async e => {
   e.preventDefault(); const input = $('task-input'); const title = input.value.trim(); if (!title || input.disabled) return;
   input.disabled = true;
-  try { await request('POST', '/api/v1/tasks', { title }); input.value = ''; await refresh(); announce('已添加事项'); }
+  try { await request('POST', '/api/v1/tasks', { title }); input.value = ''; await refresh(); announce('Task added'); }
   catch(e) { error(e.message); } finally { input.disabled = false; input.focus(); }
 });
 function draggable(element, clickable) {
