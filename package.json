@@ -18,9 +18,10 @@
     "preview:widget": "node scripts/preview-widget.cjs"
   },
   "devDependencies": {
-    "electron": "45.0.0",
     "@electron/packager": "20.3.0",
     "@playwright/test": "1.58.2",
+    "electron": "45.0.0",
+    "linkedom": "0.18.14",
     "vercel": "latest"
   }
 }

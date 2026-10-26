@@ -5,7 +5,16 @@ let expanded = false, snapshot = { tasks: [], today: '' }, busy = new Set(), ref
 const request = (method, path, body) => api ? api.request(method, path, body) : Promise.reject(new Error('Open the Ridian desktop app.'));
 function error(message = '') { $('error').hidden = !message; $('error').textContent = message; }
 function announce(message) { $('announcement').textContent = message; }
-const priorityPicker = createPriorityPicker({ commit: setPriority });
+let draftPriority = 'normal';
+function setDraftPriority(value) {
+  draftPriority = value;
+  const label = value[0].toUpperCase() + value.slice(1);
+  $('draft-priority').className = `draft-priority ${value}`;
+  $('draft-priority').setAttribute('aria-label', `Priority for new task: ${label}`);
+  $('draft-priority-label').textContent = label;
+}
+const priorityPicker = createPriorityPicker({ commit: setPriority, getDraftPriority: () => draftPriority, onDraftChange: setDraftPriority });
+priorityPicker.bindDraft($('draft-priority'));
 function render(justDone, priorityChanged) {
   const previousPositions = new Map([...document.querySelectorAll('.task')].map(row => [row.dataset.id, row.getBoundingClientRect().top]));
   const ranks = { urgent: 0, high: 1, normal: 2, low: 3 };
@@ -109,9 +118,11 @@ $('widget').addEventListener('mouseenter', () => api?.hover(true));
 $('widget').addEventListener('mouseleave', () => api?.hover(false));
 $('add-form').addEventListener('submit', async e => {
   e.preventDefault(); const input = $('task-input'); const title = input.value.trim(); if (!title || input.disabled) return;
+  priorityPicker.close();
   input.disabled = true;
-  try { await request('POST', '/api/v1/tasks', { title }); input.value = ''; await refresh(); announce('Task added'); }
-  catch(e) { error(e.message); } finally { input.disabled = false; input.focus(); }
+  $('draft-priority').disabled = true;
+  try { await request('POST', '/api/v1/tasks', { title, priority: draftPriority }); input.value = ''; setDraftPriority('normal'); await refresh(); announce('Task added'); }
+  catch(e) { error(e.message); } finally { input.disabled = false; $('draft-priority').disabled = false; input.focus(); }
 });
 function draggable(element, clickable) {
   let start, moved = false;

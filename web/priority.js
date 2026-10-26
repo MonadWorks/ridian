@@ -1,86 +1,118 @@
-// One shared picker keeps a long list quiet, and pauses refresh while dragging.
-export function createPriorityPicker({ commit, host = document.body }) {
-  const levels = ['urgent', 'high', 'normal', 'low'];
-  const names = ['Urgent', 'High', 'Normal', 'Low'];
-  const step = 40, inset = 28, width = 136, height = 176;
+const levels = ['low', 'normal', 'high', 'urgent'];
+const labels = ['Low', 'Normal', 'High', 'Urgent'];
+const colors = [[143, 172, 151], [153, 174, 191], [210, 174, 105], [162, 128, 205]];
+const clamp = value => Math.max(0, Math.min(3, value));
+
+// The actual input owns dragging, so both the axis and the thumb work natively.
+export function createPriorityPicker({ commit, getDraftPriority, onDraftChange, host = document.body }) {
   const panel = document.createElement('div');
   panel.id = 'priority-picker';
   panel.className = 'priority-picker';
   panel.hidden = true;
   panel.setAttribute('role', 'dialog');
   panel.setAttribute('aria-label', 'Priority');
-  const group = document.createElement('div');
-  group.className = 'priority-options';
-  group.setAttribute('role', 'radiogroup');
-  group.setAttribute('aria-label', 'Priority');
-  const thumb = document.createElement('span');
-  thumb.className = 'priority-thumb';
-  thumb.setAttribute('aria-hidden', 'true');
-  const buttons = levels.map((level, index) => {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = `priority-option ${level}`;
-    button.setAttribute('role', 'radio');
-    button.innerHTML = `<span>${names[index]}</span><i aria-hidden="true"></i>`;
-    button.onclick = () => finish(index);
-    group.append(button);
-    return button;
-  });
-  panel.append(group, thumb);
+  panel.innerHTML = `<div class="priority-heading"><span class="priority-spark" aria-hidden="true"></span><output class="priority-value" aria-hidden="true">Normal</output></div>
+    <div class="priority-axis">
+      <div class="priority-ticks" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+      <input class="priority-range" type="range" min="0" max="3" step="any" value="1" aria-label="Priority" aria-orientation="horizontal" aria-valuetext="Normal">
+    </div>`;
   host.append(panel);
-  let active = null;
+  const range = panel.querySelector('.priority-range');
+  const output = panel.querySelector('.priority-value');
+  const axis = panel.querySelector('.priority-axis');
+  let active = null, snapFrame = 0;
+  const indexOf = value => Math.max(0, levels.indexOf(value || 'normal'));
 
-  function preview(index, focus = false) {
+  function paint(raw, updateDraft = true) {
     if (!active) return;
-    active.index = Math.max(0, Math.min(levels.length - 1, index));
-    panel.dataset.level = levels[active.index];
-    thumb.style.transform = `translateY(${active.index * step}px)`;
-    buttons.forEach((button, i) => {
-      button.setAttribute('aria-checked', String(i === active.index));
-      button.tabIndex = i === active.index ? 0 : -1;
-    });
-    active.trigger.dataset.preview = levels[active.index];
-    if (focus) buttons[active.index].focus({ preventScroll: true });
+    const value = clamp(Number(raw));
+    const index = Math.round(value);
+    const from = Math.floor(value), to = Math.min(3, from + 1), mix = value - from;
+    const rgb = colors[from].map((channel, i) => Math.round(channel + (colors[to][i] - channel) * mix));
+    range.value = value;
+    panel.style.setProperty('--priority-color', `rgb(${rgb.join(' ')})`);
+    panel.style.setProperty('--fill', `${16 + (active.axisWidth - 32) * value / 3}px`);
+    panel.dataset.level = levels[index];
+    output.textContent = labels[index];
+    range.setAttribute('aria-valuetext', labels[index]);
+    active.trigger.dataset.preview = levels[index];
+    if (!active.task && updateDraft) onDraftChange(levels[index]);
   }
 
-  function close(restoreFocus = false) {
+  function close(cancel = false, restoreFocus = false) {
     if (!active) return;
+    cancelAnimationFrame(snapFrame);
     const previous = active;
     active = null;
-    if (previous.pointerId !== undefined && previous.trigger.hasPointerCapture(previous.pointerId)) previous.trigger.releasePointerCapture(previous.pointerId);
+    if (!previous.task && cancel) onDraftChange(previous.original);
     previous.trigger.setAttribute('aria-expanded', 'false');
     delete previous.trigger.dataset.preview;
     previous.trigger.closest('.task')?.classList.remove('choosing-priority');
-    document.documentElement.classList.remove('priority-dragging');
+    panel.classList.remove('dragging');
     panel.hidden = true;
     if (restoreFocus && previous.trigger.isConnected) previous.trigger.focus({ preventScroll: true });
   }
 
-  async function finish(index) {
+  function save(index, dismiss) {
     if (!active) return;
-    const { task, trigger } = active;
-    const value = levels[index];
-    close(true);
-    if (value !== (task.priority || 'normal')) await commit(task, value);
-    // A successful save may have sorted/replaced the row.
-    const replacement = document.querySelector(`[data-id="${CSS.escape(task.id)}"] .priority`);
-    if (replacement && (document.activeElement === document.body || document.activeElement === trigger)) replacement.focus({ preventScroll: true });
+    const session = active, value = levels[index];
+    paint(index);
+    session.original = value;
+    if (session.task || dismiss) close(false, true);
+    if (session.task && value !== (session.task.priority || 'normal')) {
+      Promise.resolve(commit(session.task, value)).then(() => {
+        const replacement = document.querySelector(`[data-id="${CSS.escape(session.task.id)}"] .priority`);
+        if (replacement && (document.activeElement === document.body || document.activeElement === session.trigger)) replacement.focus({ preventScroll: true });
+      });
+    }
+    if (!session.task && dismiss) document.getElementById('task-input')?.focus({ preventScroll: true });
   }
 
-  function open(task, trigger, keyboard = false) {
+  function confirm(dismiss = false, immediate = false) {
+    if (!active) return;
+    cancelAnimationFrame(snapFrame);
+    active.dragging = false;
+    panel.classList.remove('dragging');
+    const session = active, start = Number(range.value), index = Math.round(start);
+    if (immediate || matchMedia('(prefers-reduced-motion: reduce)').matches || Math.abs(start - index) < 0.001) return save(index, dismiss);
+    const began = performance.now();
+    function frame(now) {
+      if (active !== session) return;
+      const progress = Math.min(1, (now - began) / 130);
+      paint(start + (index - start) * (1 - Math.pow(1 - progress, 3)));
+      if (progress < 1) snapFrame = requestAnimationFrame(frame); else save(index, dismiss);
+    }
+    snapFrame = requestAnimationFrame(frame);
+  }
+
+  function open(trigger, task = null) {
+    if (active?.trigger === trigger) { confirm(true, true); return; }
     close();
-    const index = Math.max(0, levels.indexOf(task.priority || 'normal'));
+    const original = task ? task.priority || 'normal' : getDraftPriority();
     const bounds = trigger.getBoundingClientRect();
     const sheet = document.querySelector('.sheet').getBoundingClientRect();
-    const left = Math.max(sheet.left + 8, Math.min(bounds.left + bounds.width / 2 - 108, sheet.right - width - 8));
-    const top = Math.max(sheet.top + 8, Math.min(bounds.top + bounds.height / 2 - inset - index * step, sheet.bottom - height - 8));
-    active = { task, trigger, index, top, left, moved: false };
+    const width = Math.min(286, sheet.width - 24), height = 112;
+    const left = Math.max(sheet.left + 12, Math.min(bounds.right - width, sheet.right - width - 12));
+    const preferredTop = bounds.top - height - 10;
+    const top = preferredTop >= sheet.top + 10 ? preferredTop : Math.min(bounds.bottom + 10, sheet.bottom - height - 10);
+    active = { trigger, task, original, dragging: false };
+    panel.style.width = `${width}px`;
     panel.style.left = `${left}px`;
     panel.style.top = `${top}px`;
     panel.hidden = false;
+    active.axisWidth = axis.clientWidth;
     trigger.setAttribute('aria-expanded', 'true');
     trigger.closest('.task')?.classList.add('choosing-priority');
-    preview(index, keyboard);
+    paint(indexOf(original), false);
+    range.focus({ preventScroll: true });
+  }
+
+  function bind(trigger, task = null) {
+    trigger.setAttribute('aria-haspopup', 'dialog');
+    trigger.setAttribute('aria-controls', panel.id);
+    trigger.setAttribute('aria-expanded', 'false');
+    trigger.title = 'Priority';
+    trigger.onclick = () => open(trigger, task);
   }
 
   function create(task) {
@@ -88,62 +120,42 @@ export function createPriorityPicker({ commit, host = document.body }) {
     const level = task.priority || 'normal';
     button.type = 'button';
     button.className = `priority ${level}`;
-    button.setAttribute('aria-label', `Priority: ${names[levels.indexOf(level)]} — ${task.title}`);
-    button.setAttribute('aria-haspopup', 'dialog');
-    button.setAttribute('aria-controls', panel.id);
-    button.setAttribute('aria-expanded', 'false');
-    button.title = 'Priority · Drag up or down';
+    button.setAttribute('aria-label', `Priority: ${labels[indexOf(level)]} — ${task.title}`);
     button.innerHTML = '<span class="priority-dot" aria-hidden="true"></span>';
-    button.onpointerdown = event => {
-      if (event.button !== 0) return;
-      event.preventDefault();
-      event.stopPropagation();
-      open(task, button);
-      active.pointerId = event.pointerId;
-      active.startY = event.clientY;
-      button.setPointerCapture(event.pointerId);
-      document.documentElement.classList.add('priority-dragging');
-    };
-    button.onpointermove = event => {
-      if (!active || active.trigger !== button || active.pointerId !== event.pointerId) return;
-      if (Math.abs(event.clientY - active.startY) > 4) active.moved = true;
-      if (active.moved) preview(Math.round((event.clientY - active.top - inset) / step));
-    };
-    button.onpointerup = event => {
-      if (!active || active.trigger !== button || active.pointerId !== event.pointerId) return;
-      const moved = active.moved, index = active.index;
-      delete active.pointerId;
-      if (button.hasPointerCapture(event.pointerId)) button.releasePointerCapture(event.pointerId);
-      document.documentElement.classList.remove('priority-dragging');
-      // Dropping outside the small rail cancels instead of making a stray change.
-      if (moved) {
-        const inside = event.clientX >= active.left - 20 && event.clientX <= active.left + width + 20 && event.clientY >= active.top - 24 && event.clientY <= active.top + height + 24;
-        if (inside) finish(index); else close(true);
-      } else preview(index, true);
-    };
-    button.onpointercancel = () => { if (active?.trigger === button) close(true); };
-    button.onlostpointercapture = () => { if (active?.trigger === button && active.pointerId !== undefined) close(true); };
-    button.onclick = event => { if (event.detail === 0) open(task, button, true); };
+    bind(button, task);
     return button;
   }
 
-  document.addEventListener('pointerdown', event => {
-    if (active && !panel.contains(event.target) && !active.trigger.contains(event.target)) close();
-  }, true);
+  range.addEventListener('pointerdown', event => {
+    if (!active || event.button !== 0) return;
+    cancelAnimationFrame(snapFrame);
+    active.dragging = true;
+    panel.classList.add('dragging');
+    // Do not preventDefault: native range dragging must receive this event.
+  });
+  range.addEventListener('input', () => paint(range.value));
+  range.addEventListener('change', () => confirm());
+  document.addEventListener('pointerup', () => { if (active?.dragging) { active.dragging = false; panel.classList.remove('dragging'); } });
+  range.addEventListener('pointercancel', () => close(true, true));
+  range.addEventListener('keydown', event => {
+    if (!active || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    cancelAnimationFrame(snapFrame);
+    const value = Math.round(Number(range.value));
+    paint(event.key === 'Home' ? 0 : event.key === 'End' ? 3 : value + (['ArrowRight', 'ArrowUp'].includes(event.key) ? 1 : -1));
+  });
   document.addEventListener('keydown', event => {
-    if (!active) return;
-    if (event.key === 'Escape') {
-      event.preventDefault(); event.stopImmediatePropagation(); close(true);
-    } else if (['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) {
-      event.preventDefault(); event.stopImmediatePropagation();
-      preview(event.key === 'Home' ? 0 : event.key === 'End' ? levels.length - 1 : active.index + (event.key === 'ArrowUp' ? -1 : 1), true);
-    } else if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault(); event.stopImmediatePropagation(); finish(active.index);
-    } else if (event.key === 'Tab') close(true);
+    if (!active || event.isComposing) return;
+    if (event.key === 'Escape') { event.preventDefault(); event.stopImmediatePropagation(); close(true, true); }
+    else if (event.key === 'Enter') { event.preventDefault(); event.stopImmediatePropagation(); confirm(true, true); }
+    else if (event.key === 'Tab') { confirm(true, true); }
   }, true);
-  document.addEventListener('contextmenu', () => close(), true);
-  document.querySelector('.list-scroll').addEventListener('scroll', () => close(), { passive: true });
-  window.addEventListener('blur', () => close());
-  window.addEventListener('resize', () => close());
-  return { create, close, get isOpen() { return !!active; } };
+  document.addEventListener('pointerdown', event => {
+    if (active && !panel.contains(event.target) && !active.trigger.contains(event.target)) confirm(true, true);
+  }, true);
+  document.addEventListener('contextmenu', () => close(true), true);
+  document.querySelector('.list-scroll').addEventListener('scroll', () => close(true), { passive: true });
+  window.addEventListener('blur', () => close(true));
+  window.addEventListener('resize', () => close(true));
+  return { create, bindDraft: button => bind(button), close, get isOpen() { return !!active; } };
 }

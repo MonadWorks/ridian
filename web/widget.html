@@ -12,7 +12,7 @@
       <button id="collapse" class="icon-button" aria-label="Collapse" title="Collapse · Esc"><svg viewBox="0 0 20 20"><path d="M5 10h10"/></svg></button>
     </header>
     <div class="list-scroll"><ul id="tasks" class="tasks"></ul><div id="empty" class="empty"><span class="empty-orbit" aria-hidden="true">·</span></div></div>
-    <form id="add-form" class="add-form"><span aria-hidden="true">+</span><input id="task-input" placeholder="Add a task…" aria-label="Add a task" maxlength="240" autocomplete="off"><button type="submit" class="enter-key" aria-label="Add task" title="Enter to add">↵</button></form>
+    <form id="add-form" class="add-form"><span aria-hidden="true">+</span><input id="task-input" placeholder="Add a task…" aria-label="Add a task" maxlength="240" autocomplete="off"><button type="button" id="draft-priority" class="draft-priority normal" aria-label="Priority for new task: Normal"><span class="priority-dot" aria-hidden="true"></span><span id="draft-priority-label">Normal</span><svg viewBox="0 0 12 12" aria-hidden="true"><path d="m3 4.5 3 3 3-3"/></svg></button><button type="submit" class="enter-key" aria-label="Add task" title="Enter to add">↵</button></form>
     <p id="error" class="error" role="alert" hidden></p>
     <footer><button id="history" class="text-button" title="History" aria-label="History"><svg viewBox="0 0 16 16"><path d="M3 12V9m5 3V4m5 8V7"/></svg><span id="progress-label"></span></button><button id="menu" class="menu-button" aria-label="More" title="More">···</button></footer>
   </section>
