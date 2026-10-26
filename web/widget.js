@@ -1,7 +1,10 @@
 import { createPriorityPicker } from './priority.js';
+import './task-order.js';
+import { createTaskReorder } from './reorder.js';
+const { orderTasks, moveOrder } = window.RidianOrder;
 const api = window.ridian;
 const $ = id => document.getElementById(id);
-let expanded = false, snapshot = { tasks: [], today: '' }, busy = new Set(), refreshInFlight = false;
+let expanded = false, snapshot = { tasks: [], today: '' }, busy = new Set(), refreshInFlight = false, reorderSaving = false;
 const request = (method, path, body) => api ? api.request(method, path, body) : Promise.reject(new Error('Open the Ridian desktop app.'));
 function error(message = '') { $('error').hidden = !message; $('error').textContent = message; }
 function announce(message) { $('announcement').textContent = message; }
@@ -15,10 +18,10 @@ function setDraftPriority(value) {
 }
 const priorityPicker = createPriorityPicker({ commit: setPriority, getDraftPriority: () => draftPriority, onDraftChange: setDraftPriority });
 priorityPicker.bindDraft($('draft-priority'));
+const taskReorder = createTaskReorder({ list: $('tasks'), canStart: () => !busy.size && !reorderSaving && !priorityPicker.isOpen && !document.querySelector('.edit-input'), move: reorderTask });
 function render(justDone, priorityChanged) {
   const previousPositions = new Map([...document.querySelectorAll('.task')].map(row => [row.dataset.id, row.getBoundingClientRect().top]));
-  const ranks = { urgent: 0, high: 1, normal: 2, low: 3 };
-  const visible = [...snapshot.tasks].sort((a,b) => (ranks[a.priority || 'normal'] - ranks[b.priority || 'normal']));
+  const visible = orderTasks(snapshot.tasks, snapshot.taskOrder);
   const pending = visible.filter(t => !t.completedAt).length;
   const done = visible.length - pending;
   $('orb-number').textContent = pending || (done ? '✓' : '·');
@@ -31,20 +34,21 @@ function render(justDone, priorityChanged) {
   for (const task of visible) {
     const li = document.createElement('li'); li.className = `task${task.completedAt ? ' done' : ''}${task.id === justDone ? ' just-done' : ''}`; li.dataset.id = task.id;
     li.addEventListener('contextmenu', e => { e.preventDefault(); e.stopPropagation(); api?.taskMenu(task.id); });
-    const check = document.createElement('button'); check.className = 'check'; check.setAttribute('role', 'checkbox'); check.setAttribute('aria-checked', !!task.completedAt); check.setAttribute('aria-label', task.title); check.disabled = busy.has(task.id);
+    const check = document.createElement('button'); check.className = 'check'; check.setAttribute('role', 'checkbox'); check.setAttribute('aria-checked', !!task.completedAt); check.setAttribute('aria-label', task.title); check.disabled = busy.has(task.id) || reorderSaving;
     check.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 8 3 3 7-7"/></svg>';
     check.addEventListener('click', () => toggle(task));
-    const label = document.createElement('span'); label.className = 'task-text'; label.textContent = task.title; label.title = 'Double-click to edit';
+    const label = document.createElement('span'); label.className = 'task-text'; label.textContent = task.title; label.title = 'Drag to reorder · Double-click to edit';
     const flag = priorityPicker.create(task);
-    flag.disabled = busy.has(task.id);
+    flag.disabled = busy.has(task.id) || reorderSaving;
     if (task.id === priorityChanged) flag.classList.add('priority-confirmed');
     label.addEventListener('dblclick', () => edit(task, label));
     const remove = document.createElement('button'); remove.className = 'delete'; remove.textContent = '×'; remove.setAttribute('aria-label', `Delete ${task.title}`);
+    remove.disabled = busy.has(task.id) || reorderSaving;
     remove.addEventListener('click', async () => { if (busy.has(task.id)) return; busy.add(task.id); try { await request('DELETE', `/api/v1/tasks/${task.id}`); snapshot.tasks = snapshot.tasks.filter(item => item.id !== task.id); render(); announce('Task deleted'); } catch(e) { error(e.message); } finally { busy.delete(task.id); } });
-    li.append(check, label, flag, remove); fragment.append(li);
+    li.append(check, label, flag, remove); taskReorder.attach(li, task); fragment.append(li);
   }
   const focused = document.activeElement.closest?.('[data-id]')?.dataset.id;
-  const focusedControl = document.activeElement.classList.contains('priority') ? '.priority' : '.check';
+  const focusedControl = document.activeElement.classList.contains('priority') ? '.priority' : document.activeElement.classList.contains('reorder-handle') ? '.reorder-handle' : '.check';
   $('tasks').replaceChildren(fragment);
   if (focused) $('tasks').querySelector(`[data-id="${CSS.escape(focused)}"] ${focusedControl}`)?.focus({ preventScroll: true });
   if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
@@ -55,10 +59,26 @@ function render(justDone, priorityChanged) {
     }
   }
 }
+async function reorderTask(id, beforeId) {
+  if (reorderSaving || busy.size) return;
+  const previous = snapshot.taskOrder;
+  const next = moveOrder(snapshot.tasks, previous, id, beforeId);
+  const before = orderTasks(snapshot.tasks, previous).map(task => task.id).join();
+  if (orderTasks(snapshot.tasks, next).map(task => task.id).join() === before) return;
+  reorderSaving = true;
+  snapshot.taskOrder = next;
+  render();
+  try {
+    const saved = await request('POST', '/api/v1/order', { id, beforeId });
+    snapshot.taskOrder = saved.taskOrder;
+    error(); announce('Order saved');
+  } catch (e) { snapshot.taskOrder = previous; error(e.message); }
+  finally { reorderSaving = false; render(); }
+}
 async function refresh() {
-  if (refreshInFlight || priorityPicker.isOpen || busy.size || document.querySelector('.edit-input')) return;
+  if (refreshInFlight || priorityPicker.isOpen || taskReorder.isDragging || reorderSaving || busy.size || document.querySelector('.edit-input')) return;
   refreshInFlight = true;
-  try { const next = await request('GET', '/api/v1/today'); if (priorityPicker.isOpen || busy.size) return; if (JSON.stringify(snapshot) !== JSON.stringify({ ...next, exportedAt: snapshot.exportedAt })) { snapshot = next; render(); } error(); }
+  try { const next = await request('GET', '/api/v1/today'); if (priorityPicker.isOpen || taskReorder.isDragging || reorderSaving || busy.size) return; if (JSON.stringify(snapshot) !== JSON.stringify({ ...next, exportedAt: snapshot.exportedAt })) { snapshot = next; render(); } error(); }
   catch(e) { error(e.message); } finally { refreshInFlight = false; }
 }
 async function setPriority(task, value) {
@@ -83,15 +103,17 @@ async function setPriority(task, value) {
 }
 async function toggle(task) {
   if (busy.has(task.id)) return;
-  busy.add(task.id); const old = { ...task };
+  busy.add(task.id); const old = { ...task }, oldOrder = snapshot.taskOrder;
+  snapshot.taskOrder = (snapshot.taskOrder || []).filter(id => id !== task.id);
   task.completedAt = task.completedAt ? null : new Date().toISOString();
   render(task.completedAt ? task.id : null);
   try { const saved = await request('PATCH', `/api/v1/tasks/${task.id}`, { done: !!task.completedAt }); Object.assign(task, saved); announce(saved.completedAt ? 'Completed' : 'Reopened'); error(); }
-  catch(e) { Object.assign(task, old); render(); error(e.message); }
+  catch(e) { Object.assign(task, old); snapshot.taskOrder = oldOrder; render(); error(e.message); }
   finally { busy.delete(task.id); const button = $('tasks').querySelector(`[data-id="${task.id}"] .check`); if (button) button.disabled = false; const flag = $('tasks').querySelector(`[data-id="${task.id}"] .priority`); if (flag) flag.disabled = false; }
 }
 function edit(task, label) {
   if (label.querySelector('input')) return;
+  label.closest('.task').draggable = false;
   const input = document.createElement('input'); input.className = 'edit-input'; input.value = task.title; input.maxLength = 240; input.setAttribute('aria-label', 'Edit task');
   label.replaceChildren(input); input.focus(); input.select(); let committed = false;
   const finish = async cancel => { if (committed) return; committed = true; if (!cancel && input.value.trim() && input.value.trim() !== task.title) { try { await request('PATCH', `/api/v1/tasks/${task.id}`, { title: input.value }); } catch(e) { error(e.message); } } input.remove(); await refresh(); render(); };
@@ -99,12 +121,13 @@ function edit(task, label) {
   input.addEventListener('blur', () => finish(false));
 }
 async function changeExpanded(value) {
+  taskReorder.cancel();
   priorityPicker.close();
   if (!value) { document.querySelector('.sheet').classList.add('closing'); await new Promise(r => setTimeout(r, matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 150)); }
   if (api) await api.expand(value); else applyExpanded(value);
 }
 function applyExpanded(value) {
-  if (!value) priorityPicker.close();
+  if (!value) { priorityPicker.close(); taskReorder.cancel(); }
   expanded = value; $('orb').hidden = value; document.querySelector('.sheet').hidden = !value; document.querySelector('.sheet').classList.remove('closing');
   if (value) { refresh(); setTimeout(() => $('task-input').focus(), 200); } else $('orb').focus();
 }
@@ -117,7 +140,7 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape' && expanded) 
 $('widget').addEventListener('mouseenter', () => api?.hover(true));
 $('widget').addEventListener('mouseleave', () => api?.hover(false));
 $('add-form').addEventListener('submit', async e => {
-  e.preventDefault(); const input = $('task-input'); const title = input.value.trim(); if (!title || input.disabled) return;
+  e.preventDefault(); const input = $('task-input'); const title = input.value.trim(); if (!title || input.disabled || reorderSaving) return;
   priorityPicker.close();
   input.disabled = true;
   $('draft-priority').disabled = true;

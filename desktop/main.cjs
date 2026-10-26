@@ -61,6 +61,7 @@ function showMenu() {
       if (!result.canceled && result.filePath) { try { atomicWrite(result.filePath, service.store.snapshot()); } catch { dialog.showErrorBox('Export failed', 'Choose a writable folder.'); } }
     } },
     { label: 'Data folder', click: () => shell.openPath(dataDir) },
+    { label: 'Reset order', enabled: !!service.store.state.taskOrder?.length, click: () => { service.store.resetOrder(); win.webContents.send('window:expanded', expanded); } },
     { label: 'Open at login', type: 'checkbox', checked: app.getLoginItemSettings().openAtLogin, enabled: app.isPackaged, click: item => app.setLoginItemSettings({ openAtLogin: item.checked }) },
     { type: 'separator' },
     { label: 'Quit Ridian', accelerator: 'CommandOrControl+Q', click: () => app.quit() }

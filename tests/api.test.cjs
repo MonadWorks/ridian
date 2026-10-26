@@ -17,6 +17,12 @@ test('authenticated API separates reads and writes, blocks hostile origins, and 
   const persisted=await call('/api/v1/history',service.credentials.readToken);assert.equal((await persisted.json()).tasks[0].priority,'urgent');
   const rule=await call('/api/v1/strategies',service.credentials.writeToken,'POST',{title:'间隔复习',schedule:{type:'interval',everyDays:2}});assert.equal(rule.status,200);
   const today=await (await call('/api/v1/today',service.credentials.readToken)).json();assert.equal(today.tasks.length,2);
+  const moved=await call('/api/v1/order',service.credentials.writeToken,'POST',{id:task.id,beforeId:today.tasks.find(item=>item.id!==task.id).id});assert.equal(moved.status,200);
+  const ordered=await (await call('/api/v1/today',service.credentials.readToken)).json();assert.equal(ordered.tasks[0].id,task.id);
+  assert.equal((await call('/api/v1/order',service.credentials.readToken,'POST',{id:task.id,beforeId:null})).status,403);
+  assert.equal((await call('/api/v1/order',service.credentials.readToken,'DELETE')).status,403);
+  assert.equal((await call('/api/v1/order',service.credentials.writeToken,'DELETE')).status,200);
+  const reset=await (await call('/api/v1/today',service.credentials.readToken)).json();assert.equal(reset.tasks.at(-1).id,task.id);
   const invalid=await call('/api/v1/tasks',service.credentials.writeToken,'POST',{title:'bad',date:'2026-02-30'});assert.equal(invalid.status,400);
   const forged=await new Promise(resolve=>{const req=http.get(base+'/api/v1/history',{headers:{Host:'evil.example',Authorization:`Bearer ${service.credentials.readToken}`}},res=>{res.resume();resolve(res.statusCode);});req.on('error',()=>resolve(0));});assert.equal(forged,403);
 });

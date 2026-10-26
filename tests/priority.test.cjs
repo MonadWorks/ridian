@@ -8,7 +8,7 @@ const { parseHTML } = require('linkedom');
 const root = path.join(__dirname, '..');
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
-async function fixture({ tasks = [], reducedMotion = true, failCreate = false } = {}) {
+async function fixture({ tasks = [], taskOrder = [], reducedMotion = true, failCreate = false, failReorder = false } = {}) {
   const { window, document } = parseHTML(fs.readFileSync(path.join(root, 'web/widget.html'), 'utf8'));
   Object.defineProperty(document, 'activeElement', { value: document.body, writable: true });
   window.HTMLElement.prototype.focus = function () { this.ownerDocument.activeElement = this; };
@@ -19,7 +19,7 @@ async function fixture({ tasks = [], reducedMotion = true, failCreate = false } 
   Object.defineProperty(window.HTMLElement.prototype, 'clientWidth', { configurable: true, get() { return 248; } });
   let now = 0, nextFrame = 0;
   const frames = new Map(), calls = [];
-  const state = { tasks: structuredClone(tasks), today: '2026-10-26', exportedAt: '2026-10-26T12:00:00Z' };
+  const state = { tasks: structuredClone(tasks), taskOrder, today: '2026-10-26', exportedAt: '2026-10-26T12:00:00Z' };
   let expandedCallback;
   window.ridian = {
     onExpanded(callback) { expandedCallback = callback; },
@@ -28,6 +28,11 @@ async function fixture({ tasks = [], reducedMotion = true, failCreate = false } 
     async request(method, route, body) {
       calls.push({ method, route, body });
       if (method === 'GET') return structuredClone(state);
+      if (method === 'POST' && route === '/api/v1/order') {
+        if (failReorder) throw new Error('Test order save failed');
+        state.taskOrder = require('../web/task-order.js').moveOrder(state.tasks, state.taskOrder, body.id, body.beforeId);
+        return { taskOrder: [...state.taskOrder] };
+      }
       if (method === 'POST') {
         if (failCreate) throw new Error('Test save failed');
         const task = { ...body, id: `task-${state.tasks.length}`, date: state.today, completedAt: null };
@@ -42,7 +47,7 @@ async function fixture({ tasks = [], reducedMotion = true, failCreate = false } 
   const context = vm.createContext({ window, document, console, CSS: { escape: value => value }, setTimeout: () => 0, clearTimeout() {}, setInterval: () => 0,
     matchMedia: () => ({ matches: reducedMotion }), performance: { now: () => now },
     requestAnimationFrame(callback) { frames.set(++nextFrame, callback); return nextFrame; }, cancelAnimationFrame(id) { frames.delete(id); } });
-  const source = fs.readFileSync(path.join(root, 'web/priority.js'), 'utf8').replace('export function createPriorityPicker', 'function createPriorityPicker') + '\n' + fs.readFileSync(path.join(root, 'web/widget.js'), 'utf8').replace(/^import .*\n/, '');
+  const source = fs.readFileSync(path.join(root, 'web/task-order.js'), 'utf8') + '\n' + fs.readFileSync(path.join(root, 'web/reorder.js'), 'utf8').replace('export function createTaskReorder', 'function createTaskReorder') + '\n' + fs.readFileSync(path.join(root, 'web/priority.js'), 'utf8').replace('export function createPriorityPicker', 'function createPriorityPicker') + '\n' + fs.readFileSync(path.join(root, 'web/widget.js'), 'utf8').replace(/^import .*\n/gm, '');
   new vm.Script(source, { filename: 'priority-widget-unit.js' }).runInContext(context);
   await flush();
   const $ = selector => document.querySelector(selector);
@@ -52,7 +57,7 @@ async function fixture({ tasks = [], reducedMotion = true, failCreate = false } 
   const advance = milliseconds => { now = milliseconds; const queue = [...frames.values()]; frames.clear(); queue.forEach(callback => callback(now)); };
   expandedCallback(true);
   await flush();
-  return { $, event, open, value, advance, state, calls, document };
+  return { $, event, open, value, advance, state, calls, document, context };
 }
 
 test('new-task priority opens before typing and the axis previews continuously', async () => {
@@ -131,4 +136,50 @@ test('release eases to a detent while keyboard selection works without dragging'
   f.event(f.$('.priority-range'), 'keydown', { key: 'Enter' });
   assert.equal(f.$('#draft-priority-label').textContent, 'Normal');
   assert.equal(f.$('#priority-picker').hidden, true);
+});
+
+const sampleTasks = [
+  { id: 'high', title: 'High task', priority: 'high', date: '2026-10-26', completedAt: null },
+  { id: 'low', title: 'Low task', priority: 'low', date: '2026-10-26', completedAt: null },
+  { id: 'done', title: 'Done task', priority: 'urgent', date: '2026-10-26', completedAt: '2026-10-26T10:00:00Z' }
+];
+const displayedIds = f => [...f.$('#tasks').children].map(row => row.dataset.id);
+
+test('default order puts all completed tasks last regardless of priority', async () => {
+  const f = await fixture({ tasks: [...sampleTasks].reverse() });
+  assert.deepEqual(displayedIds(f), ['high', 'low', 'done']);
+});
+
+test('keyboard moves cross priority and completion boundaries and survive refresh', async () => {
+  const f = await fixture({ tasks: sampleTasks });
+  f.event(f.$('[data-id="high"] .reorder-handle'), 'keydown', { key: 'End' }); await flush();
+  assert.deepEqual(displayedIds(f), ['low', 'done', 'high']);
+  assert.deepEqual(Array.from(f.state.taskOrder), ['low', 'done', 'high']);
+  assert.equal(f.state.tasks[0].priority, 'high');
+  await vm.runInContext('refresh()', f.context);
+  assert.deepEqual(displayedIds(f), ['low', 'done', 'high']);
+  f.event(f.$('[data-id="done"] .reorder-handle'), 'keydown', { key: 'Home' }); await flush();
+  assert.deepEqual(displayedIds(f), ['done', 'low', 'high']);
+});
+
+test('native drag events save only on drop and cancellation leaves order unchanged', async () => {
+  const f = await fixture({ tasks: sampleTasks });
+  const transfer = { setData() {}, setDragImage() {} };
+  f.event(f.$('[data-id="high"] .task-text'), 'dragstart', { dataTransfer: transfer, clientX: 260, clientY: 375 });
+  f.event(f.$('.list-scroll'), 'dragover', { dataTransfer: transfer, clientY: 450 });
+  assert.equal(f.calls.filter(call => call.route === '/api/v1/order').length, 0);
+  f.event(f.document, 'dragend');
+  assert.deepEqual(displayedIds(f), ['high', 'low', 'done']);
+  f.event(f.$('[data-id="high"] .task-text'), 'dragstart', { dataTransfer: transfer, clientX: 260, clientY: 375 });
+  f.event(f.$('.list-scroll'), 'drop', { dataTransfer: transfer, clientY: 450 }); await flush();
+  assert.deepEqual(displayedIds(f), ['low', 'done', 'high']);
+  assert.equal(f.calls.filter(call => call.route === '/api/v1/order').length, 1);
+});
+
+test('a failed reorder restores the previous order', async () => {
+  const f = await fixture({ tasks: sampleTasks, failReorder: true });
+  f.event(f.$('[data-id="high"] .reorder-handle'), 'keydown', { key: 'End' }); await flush();
+  assert.deepEqual(displayedIds(f), ['high', 'low', 'done']);
+  assert.equal(f.$('#error').textContent, 'Test order save failed');
+  assert.equal(f.$('.check').disabled, false);
 });

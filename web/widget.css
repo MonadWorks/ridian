@@ -47,3 +47,17 @@
 @keyframes priority-reveal{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:translateY(0)}}
 @keyframes priority-settle{from{opacity:.5;transform:scale(.8)}to{opacity:0;transform:scale(1.8)}}
 @media(prefers-reduced-motion:reduce){.priority-dot:after,.priority-spark:after{animation:none!important;opacity:.15}.priority-picker,.priority-range{animation:none;transition:none}}
+/* Reorder freely across priorities and completion states. */
+.list-scroll{position:relative}
+.task-text{cursor:grab;user-select:none}
+.task-text:active{cursor:grabbing}
+.edit-input{cursor:text;user-select:text}
+.reorder-handle{position:absolute;left:-19px;top:11px;width:17px;height:23px;display:grid;place-items:center;color:#9ca994;opacity:0;cursor:grab;border-radius:5px;transition:opacity 140ms}
+.reorder-handle svg{width:12px;height:18px;stroke-width:1}
+.task:hover .reorder-handle,.task:focus-within .reorder-handle,.reorder-handle:focus-visible{opacity:.7}
+.reorder-handle:focus-visible{outline:1px solid #819b88;outline-offset:0;opacity:1}
+.task.being-dragged{opacity:.23}
+.order-marker{position:absolute;z-index:2;left:22px;right:21px;height:2px;border-radius:2px;background:#9caf98;box-shadow:0 0 8px #e8d89a80;pointer-events:none}
+.order-marker:before{content:"";position:absolute;left:-3px;top:-2px;width:6px;height:6px;background:#9caf98;border-radius:50%}
+.order-marker[hidden]{display:none}
+.reordering .delete{opacity:0}
