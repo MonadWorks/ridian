@@ -1,104 +1,147 @@
 # Ridian
 
-极简英文界面的白色悬浮球与每日清单，待办内容支持中文。奶黄色的浅光晕、安静的完成动效，以及可被 AI 读取和管理的本地记录。
+[![English](docs/assets/english.svg)](README.md) [![简体中文](docs/assets/chinese.svg)](README.zh-CN.md)
 
-## 使用
+A quiet daily task list that floats on your desktop. A white orb, a soft golden glow, gentle completion animations, and local records your AI can read and manage. The interface is in English; task titles support Chinese and other languages.
 
-- 打开 `~/Applications/Ridian.app`。点击小圆点展开，点击右上角横线或按 Esc 收起。
-- 拖动小圆点或面板标题移动位置。切换到其他应用后淡为半透明，移回鼠标恢复。
-- 输入事项，回车添加；点击圆圈完成，再次点击撤销。双击文字编辑。
-- 在「Add a task」右侧点击优先级按钮即可先选择，再添加事项。横向拖动白色滑块，轨道颜色连续变化，松手吸附到「Low / Normal / High / Urgent」四档之一；成功添加后回到 Normal。已有事项点击右侧圆点使用同一滑轴。← / → 选择、Enter 确认、Esc 取消。更改后清单平滑排序，右键菜单仍可使用。
-- 默认未完成事项按优先级排序，已完成事项排最后。拖动事项文字或悬停时出现的左侧手柄，可以跨优先级、跨完成状态自由调整；顺序会保存，刷新或重启不会排回去。新事项按默认规则插入，新勾选完成的事项先移到底部，也可再次拖动。菜单中的「Reset order」恢复默认排序。手柄获得键盘焦点后可用 ↑ / ↓、Home / End 移动。
-- 鼠标悬停显示删除按钮。未完成事项自动留在今天，原始计划日期仍保留。
-- `⌘ ⇧ Space` 展开或收起。菜单栏小圆圈也可以唤出清单，右键菜单栏图标查看菜单。
-- 左下角打开每日记录；右下角 `···` 提供导出、AI 配置、在线记录页、登录启动与退出。
+- **Always within reach.** Expand the orb to see today. It fades to translucent when you switch to another app.
+- **Priorities, with room to rearrange.** A horizontal slider with four priority levels. Drag tasks into any order to override the defaults.
+- **A record of each day.** An annual activity heatmap, daily lists, and simple completion statistics.
+- **Ready for your AI.** A local HTTP API, separate read and write keys, and recurring tasks based on intervals, weekdays, or specific dates.
 
-每日记录页有年度热力图、每日清单、完成总数、活跃天数与最长连续天数。热力图按实际完成日期计数，历史计划日期与后来完成的日期分别保留。撤销完成会同时更新统计。
+## Preview
 
-## 数据和连接
+These earlier English interface screenshots show empty states without personal tasks. The current app also includes a priority slider and free task reordering, which are not shown here.
 
-数据在 `~/Library/Application Support/Ridian/`：
+<p align="center">
+  <img src="docs/assets/widget-preview.png" width="356" alt="An earlier empty Ridian floating task panel in white with a soft golden glow">
+</p>
 
-- `journal.json`：任务与重复策略，写入使用临时文件、fsync 和原子替换。
-- `backups/YYYY-MM-DD.json`：每天第一次修改前的备份。
-- `connection.json`：本地 HTTP 地址、只读 `readToken` 和可写 `writeToken`。权限 `0600`。
-- `preferences.json`：悬浮球的位置。
+<p align="center">
+  <img src="docs/assets/history-preview.jpg" width="900" alt="An earlier empty Ridian history page with an annual activity heatmap and daily task area">
+</p>
 
-本地网页与桌面使用同一份数据。Vercel 页面通过本机接口读取，浏览器可能需要允许访问本地网络；在同一台 Mac 上保持日点运行即可。关闭桌面应用后，网页展示浏览器最近缓存的快照。**此版本不提供云端数据同步或其他设备自动同步。**可以导出 JSON 并在另一设备的记录页打开备份查看。网页上的「Open backup」只读预览，不覆盖桌面数据。浏览器缓存可通过「Disconnect」清除。
+## Quick start
 
-在线记录页只携带只读密钥；密钥通过 URL fragment 传递，页面读取后立即从地址栏清除，不会发送给 Vercel。仅在当前浏览器标签页的 sessionStorage 保存连接密钥。任务快照保存在该浏览器的 localStorage；完成工作后可手动断开。
+The desktop app currently targets **Apple Silicon macOS**. Requires **Node.js 22.12 or later**.
 
-## AI HTTP 接口
-
-基地址 `http://127.0.0.1:43127`。所有数据接口需要 `Authorization: Bearer <token>`，JSON 请求体使用 `Content-Type: application/json`。应用仅监听本机地址；CORS 仅允许本地页面及配置中的部署域名。
-
-在日点菜单「AI access」中复制只读或读写配置。也可由本机 AI 从上述 `connection.json` 读取；不要把这个文件放进 Git 或公开上传。
-
-| 方法 | 路径 | 用途 |
-|---|---|---|
-| GET | `/api/v1/today` | 今日事项，包括前几天未完成的事项 |
-| GET | `/api/v1/tasks?date=2026-10-26` | 查询某天计划或完成的任务；不带 date 返回全部 |
-| GET | `/api/v1/history` | 完整记录、策略、时区和当前本地日期 |
-| GET | `/api/v1/export` | 完整 JSON 备份 |
-| POST | `/api/v1/tasks` | 添加事项 |
-| PATCH | `/api/v1/tasks/:id` | 更新标题、优先级、计划日期或完成状态 |
-| DELETE | `/api/v1/tasks/:id` | 删除事项 |
-| POST | `/api/v1/order` | 手动移动今日事项：`{"id":"task-id","beforeId":"target-id"}`，`beforeId:null` 移到最后 |
-| DELETE | `/api/v1/order` | 恢复默认排序 |
-| GET / POST | `/api/v1/strategies` | 查看 / 新增重复策略 |
-| PATCH / DELETE | `/api/v1/strategies/:id` | 更新 / 删除策略 |
-
-只读密钥的写入请求返回 403。无效密钥返回 401。创建与编辑成功返回 200 和 JSON。
-
-添加事项：
-
-```json
-{"title":"复习第一章","date":"2026-10-27","priority":"high"}
+```sh
+git clone https://github.com/MonadWorks/ridian.git
+cd ridian
+npm ci
+npm start
 ```
 
-`date` 默认当天，`priority` 默认 `normal`，支持 `urgent`、`high`、`normal`、`low`。
+Build an app you can open independently:
 
-更新事项：
+```sh
+npm run package
+open release/Ridian-darwin-arm64/Ridian.app
+```
+
+You can also copy the built `Ridian.app` into `~/Applications/`. Local builds use ad-hoc signing and are not notarized by Apple. Distribution to other Macs requires the appropriate signing and notarization process.
+
+The [online history page](https://ridian-journal.vercel.app) can connect to Ridian running on the same Mac. Choose **Demo** to explore sample data.
+
+## Using Ridian
+
+- Open `Ridian.app`. Click the orb to expand it. Click the minus button in the upper right or press **Esc** to collapse it.
+- Drag the orb or the panel header to move it. Switch to another app to make it translucent; hover over Ridian to restore its opacity.
+- Type a task and press **Enter** to add it. Click its circle to complete it, or click again to undo. Double-click the text to edit.
+- Set a priority **before adding a task** using the button beside **Add a task**. Drag the white slider horizontally: the track changes color continuously, then snaps to **Low / Normal / High / Urgent** on release. It resets to Normal after a successful addition. Click an existing task's colored dot to use the same slider. Use **← / →** to select, **Enter** to confirm, or **Esc** to cancel. Priority changes animate the list into its new order where the default ordering applies. Priority is also available in the context menu.
+- By default, pending tasks appear from highest to lowest priority, with completed tasks at the bottom. Drag task text or the handle that appears on hover to move any task across priority levels or completion states. Your order persists through refreshes and restarts. New tasks are inserted using the default rules; newly completed tasks move to the bottom and can be dragged again. Choose **Reset order** in the menu to restore the defaults. With a drag handle focused, use **↑ / ↓**, **Home**, or **End** to move a task.
+- Hover over a task to reveal its delete button. Unfinished tasks carry over into today while retaining their original planned date.
+- Press **⌘ ⇧ Space** to expand or collapse. The menu bar circle also opens the list; right-click it for the menu.
+- Open history from the lower left. The **···** menu provides export, AI access, online history, launch at login, and quit.
+
+History includes an annual heatmap, daily task lists, total completions, active days, and the longest streak. The heatmap counts tasks on the day they were actually completed. Planned dates and later completion dates are retained separately. Undoing a completion also updates the statistics.
+
+## Data and connections
+
+Data is stored in `~/Library/Application Support/Ridian/`:
+
+| File | Contents |
+| --- | --- |
+| `journal.json` | Tasks, recurring strategies, and manual order. Writes use a temporary file, `fsync`, and atomic replacement. |
+| `backups/YYYY-MM-DD.json` | A backup made before the first change each day. |
+| `connection.json` | The local HTTP address, a read-only `readToken`, and a writable `writeToken`. File permissions are `0600`. |
+| `preferences.json` | The floating orb's position. |
+
+The local history page and desktop app share the same data. The Vercel-hosted page reads through the local API; your browser may ask for local network access. Keep Ridian running on the same Mac. After the app quits, the page displays its most recently cached snapshot. **This version does not provide cloud data sync or automatic sync across devices.** Export JSON to view a backup in the history page on another device. **Open backup** is a read-only preview and does not overwrite desktop data. **Disconnect** clears the browser's connection and cached snapshot.
+
+The online history link carries only a read-only key, passed through the URL fragment. The page removes it from the address bar immediately after reading it; the fragment is not sent to Vercel. Connection keys are kept in the current tab's `sessionStorage`. Task snapshots are cached in that browser's `localStorage`. Disconnect when you want to clear them.
+
+## AI HTTP API
+
+Base URL: `http://127.0.0.1:43127`. Every data endpoint requires `Authorization: Bearer <token>`. Use `Content-Type: application/json` for JSON request bodies. The service listens only on the loopback address. CORS permits only local pages and the configured deployment origins.
+
+Copy a read-only or read/write configuration from Ridian's **AI access** menu. A local AI tool can also read `connection.json` at the location above. Do not commit or publicly upload this file.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/api/v1/today` | Today's tasks, including unfinished tasks from earlier days |
+| GET | `/api/v1/tasks?date=2026-10-26` | Tasks planned or completed on a date; omit `date` for all tasks |
+| GET | `/api/v1/history` | Full records, strategies, time zone, and current local date |
+| GET | `/api/v1/export` | Full JSON backup |
+| POST | `/api/v1/tasks` | Add a task |
+| PATCH | `/api/v1/tasks/:id` | Update title, priority, planned date, or completion state |
+| DELETE | `/api/v1/tasks/:id` | Delete a task |
+| POST | `/api/v1/order` | Move a task in today's list: `{"id":"task-id","beforeId":"target-id"}`; use `beforeId:null` to move it to the end |
+| DELETE | `/api/v1/order` | Restore the default order |
+| GET / POST | `/api/v1/strategies` | List / create recurring strategies |
+| PATCH / DELETE | `/api/v1/strategies/:id` | Update / delete a strategy |
+
+Write requests using a read-only key return `403`. Invalid keys return `401`. Successful creation and updates return `200` with JSON.
+
+Add a task:
+
+```json
+{"title":"Review chapter one","date":"2026-10-27","priority":"high"}
+```
+
+`date` defaults to today. `priority` defaults to `normal` and accepts `urgent`, `high`, `normal`, or `low`.
+
+Update a task:
 
 ```json
 {"done":true}
 ```
 
-`done:false` 撤销完成。`title`、`date` 和 `priority` 可独立修改。
+Use `done:false` to undo completion. You can update `title`, `date`, and `priority` independently.
 
-每隔 3 天复习：
+Review every three days:
 
 ```json
 {
-  "title":"复习第一章",
+  "title":"Review chapter one",
   "priority":"high",
   "startDate":"2026-10-27",
   "endDate":"2026-12-31",
   "schedule":{"type":"interval","everyDays":3},
-  "metadata":{"source":"ai","topic":"第一章"}
+  "metadata":{"source":"ai","topic":"Chapter one"}
 }
 ```
 
-每周一、周五：
+Repeat on Mondays and Fridays:
 
 ```json
-{"title":"每周回顾","schedule":{"type":"weekly","weekdays":[1,5]}}
+{"title":"Weekly review","schedule":{"type":"weekly","weekdays":[1,5]}}
 ```
 
-指定间隔复习日期（由 AI 计算间隔即可）：
+Schedule specific review dates, with intervals calculated by your AI:
 
 ```json
 {
-  "title":"复习：记忆曲线",
+  "title":"Spaced repetition review",
   "startDate":"2026-10-27",
   "schedule":{"type":"dates","dates":["2026-10-27","2026-10-28","2026-10-30","2026-11-03","2026-11-10"]},
-  "metadata":{"reviewIntervals":[0,1,3,7,14],"notes":"AI 可在此保存自己的策略上下文"}
+  "metadata":{"reviewIntervals":[0,1,3,7,14],"notes":"AI strategy context can be stored here"}
 }
 ```
 
-`weekdays` 使用 0=周日到 6=周六。`enabled:false` 暂停策略，删除或暂停不删除已经生成的事项。后台每 30 秒检查一次，并在应用启动或接口访问时补齐到期任务；相同策略在相同日期只生成一次。未来日期的事项到当天才生成。遵循电脑当前本地日期与时区；应用退出时不常驻调度，重新打开会补齐。策略 `metadata` 支持最多 4000 字符的 JSON 对象，以容纳 AI 的复习逻辑。此版本不提供小时级提醒、推送通知或自动 AI 推理。
+`weekdays` uses `0` for Sunday through `6` for Saturday. Set `enabled:false` to pause a strategy. Pausing or deleting a strategy does not delete tasks it has already generated. The app checks every 30 seconds and catches up on startup or API access. Each strategy generates at most one task per date; future occurrences are generated when their date arrives. Scheduling follows the computer's current local date and time zone. Nothing runs after the app quits; reopening it catches up on missed occurrences. Strategy `metadata` accepts a JSON object up to 4,000 characters to hold your AI's review logic. This version does not include hourly reminders, push notifications, or automatic AI reasoning.
 
-AI 的最小读取示例（不输出密钥）：
+A minimal Python example for an AI tool to read today's tasks without printing the key:
 
 ```python
 import json, pathlib, urllib.request
@@ -107,27 +150,22 @@ request = urllib.request.Request(config['baseUrl'] + '/api/v1/today', headers={'
 print(urllib.request.urlopen(request).read().decode())
 ```
 
-## 开发与检查
-
-需要 Node.js 22.12 或更新版本。桌面打包面向 Apple Silicon macOS。
+## Development and checks
 
 ```sh
-git clone https://github.com/MonadWorks/ridian.git
-cd ridian
-npm ci
 npm test
-npm start
-# 使用合成数据在浏览器预览悬浮面板（不访问个人待办）
+# Preview the floating panel with synthetic data, without accessing personal tasks
 npm run preview:widget
-# 独立运行桌面 + 网页交互检查（先退出日点，避免端口冲突）
+# Run desktop and web interaction checks separately; quit Ridian first to free its port
 node tests/desktop-smoke.cjs
+npm run build
 npm run package
 ```
 
-`npm run build` 生成可部署的 `dist/`，无运行时第三方依赖。桌面使用 Electron，静态前端使用原生 JS 与 CSS。`desktop/cloud.json` 保存允许读取本机数据的在线记录页地址；更换部署域名后需要更新该文件并重新打包。
+`npm run build` creates a deployable `dist/` directory with no third-party runtime dependencies. The desktop app uses Electron; the static frontend uses vanilla JavaScript and CSS. `desktop/cloud.json` holds the online history URL allowed to read local data. If you change the deployment domain, update this file and rebuild the desktop app.
 
-程序是本机制作的 Apple Silicon macOS 应用，未进行 Apple 公证；在此电脑上本地构建与运行。分发到其他电脑前需按 Apple 要求签名、公证。
+When editing documentation, update both `README.md` and `README.zh-CN.md`. Keep the language buttons at the top and keep features, commands, examples, and limitations equivalent. Use only empty states or synthetic data in preview images.
 
-## 许可证
+## License
 
-[MIT](LICENSE)。
+[MIT](LICENSE).
