@@ -7,6 +7,7 @@ const os = require('node:os');
   const directory=fs.mkdtempSync(path.join(os.tmpdir(),'ridian-desktop-'));
   let app;
   try {
+    fs.mkdirSync(path.join(__dirname,'../test-results'),{recursive:true});
     app=await electron.launch({args:[path.join(__dirname,'..')],env:{...process.env,RIDIAN_TEST:'1',RIDIAN_DATA_DIR:directory}});
     const page=await app.firstWindow();await page.waitForSelector('#orb');
     const issues=[];page.on('pageerror',e=>issues.push(e.message));
@@ -15,8 +16,26 @@ const os = require('node:os');
     await page.getByRole('checkbox',{name:'完成今天最重要的一件事'}).click();
     await page.waitForFunction(()=>document.querySelector('.task.done'));
     const snapshot=await app.evaluate(()=>global.__ridianTest.service.store.snapshot());assert.equal(snapshot.tasks.length,3);assert.equal(snapshot.tasks.filter(t=>t.completedAt).length,1);
-    await app.evaluate(()=>{const {service}=global.__ridianTest;service.store.update(service.store.snapshot().tasks[2].id,{priority:'high'});});
-    await page.waitForSelector('.priority.high',{timeout:7000});
+    const priorityButton=()=>page.getByRole('button',{name:/Priority: .*整理复习笔记/});
+    await priorityButton().press('Enter');
+    assert.equal(await page.getByRole('radio').count(),4);
+    await page.getByRole('radio',{name:'Normal',exact:true}).press('Home');
+    await page.getByRole('radio',{name:'Urgent',exact:true}).press('Escape');
+    assert.equal(await page.locator('.sheet').isVisible(),true);
+    assert.equal((await app.evaluate(()=>global.__ridianTest.service.store.snapshot())).tasks[2].priority,'normal');
+    await priorityButton().click();
+    await page.getByRole('radio',{name:'Urgent',exact:true}).click();
+    await page.waitForSelector('.priority.urgent:not([disabled])');
+    assert.equal((await app.evaluate(()=>global.__ridianTest.service.store.snapshot())).tasks[2].priority,'urgent');
+    for (const level of ['Low','High']) {
+      const start=await priorityButton().boundingBox();
+      await page.mouse.move(start.x+start.width/2,start.y+start.height/2);await page.mouse.down();
+      const target=await page.getByRole('radio',{name:level,exact:true}).boundingBox();
+      await page.mouse.move(start.x+start.width/2,target.y+target.height/2,{steps:12});
+      await page.mouse.up();
+      await page.waitForSelector(`.priority.${level.toLowerCase()}:not([disabled])`);
+      assert.equal((await app.evaluate(()=>global.__ridianTest.service.store.snapshot())).tasks[2].priority,level.toLowerCase());
+    }
     await page.screenshot({path:path.join(__dirname,'../test-results/widget.png')});
     const bounds=await app.evaluate(()=>global.__ridianTest.win.getBounds());assert.equal(bounds.width,356);assert.equal(bounds.height,468);
     await page.mouse.move(0,0);await page.evaluate(()=>window.ridian.hover(false));await app.evaluate(()=>global.__ridianTest.win.blur());await page.waitForTimeout(400);

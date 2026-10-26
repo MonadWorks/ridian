@@ -1,11 +1,14 @@
+import { createPriorityPicker } from './priority.js';
 const api = window.ridian;
 const $ = id => document.getElementById(id);
 let expanded = false, snapshot = { tasks: [], today: '' }, busy = new Set(), refreshInFlight = false;
 const request = (method, path, body) => api ? api.request(method, path, body) : Promise.reject(new Error('Open the Ridian desktop app.'));
 function error(message = '') { $('error').hidden = !message; $('error').textContent = message; }
 function announce(message) { $('announcement').textContent = message; }
-function render(justDone) {
-  const ranks = { high: 0, normal: 1, low: 2 };
+const priorityPicker = createPriorityPicker({ commit: setPriority });
+function render(justDone, priorityChanged) {
+  const previousPositions = new Map([...document.querySelectorAll('.task')].map(row => [row.dataset.id, row.getBoundingClientRect().top]));
+  const ranks = { urgent: 0, high: 1, normal: 2, low: 3 };
   const visible = [...snapshot.tasks].sort((a,b) => (ranks[a.priority || 'normal'] - ranks[b.priority || 'normal']));
   const pending = visible.filter(t => !t.completedAt).length;
   const done = visible.length - pending;
@@ -23,21 +26,51 @@ function render(justDone) {
     check.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 8 3 3 7-7"/></svg>';
     check.addEventListener('click', () => toggle(task));
     const label = document.createElement('span'); label.className = 'task-text'; label.textContent = task.title; label.title = 'Double-click to edit';
-    if (task.priority && task.priority !== 'normal') { const flag = document.createElement('button'); flag.className = `priority ${task.priority}`; flag.textContent = '·'; flag.title = task.priority === 'high' ? 'High' : 'Low'; flag.setAttribute('aria-label', `${flag.title}, change priority`); flag.onclick = () => api?.taskMenu(task.id); li.append(flag); }
+    const flag = priorityPicker.create(task);
+    flag.disabled = busy.has(task.id);
+    if (task.id === priorityChanged) flag.classList.add('priority-confirmed');
     label.addEventListener('dblclick', () => edit(task, label));
     const remove = document.createElement('button'); remove.className = 'delete'; remove.textContent = '×'; remove.setAttribute('aria-label', `Delete ${task.title}`);
-    remove.addEventListener('click', async () => { if (busy.has(task.id)) return; busy.add(task.id); try { await request('DELETE', `/api/v1/tasks/${task.id}`); await refresh(); announce('Task deleted'); } catch(e) { error(e.message); } finally { busy.delete(task.id); } });
-    li.append(check, label, remove); fragment.append(li);
+    remove.addEventListener('click', async () => { if (busy.has(task.id)) return; busy.add(task.id); try { await request('DELETE', `/api/v1/tasks/${task.id}`); snapshot.tasks = snapshot.tasks.filter(item => item.id !== task.id); render(); announce('Task deleted'); } catch(e) { error(e.message); } finally { busy.delete(task.id); } });
+    li.append(check, label, flag, remove); fragment.append(li);
   }
   const focused = document.activeElement.closest?.('[data-id]')?.dataset.id;
+  const focusedControl = document.activeElement.classList.contains('priority') ? '.priority' : '.check';
   $('tasks').replaceChildren(fragment);
-  if (focused) $('tasks').querySelector(`[data-id="${focused}"] .check`)?.focus({ preventScroll: true });
+  if (focused) $('tasks').querySelector(`[data-id="${CSS.escape(focused)}"] ${focusedControl}`)?.focus({ preventScroll: true });
+  if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    for (const row of $('tasks').children) {
+      const previous = previousPositions.get(row.dataset.id);
+      const delta = previous === undefined ? 5 : previous - row.getBoundingClientRect().top;
+      if (delta) row.animate([{ transform: `translateY(${delta}px)`, opacity: previous === undefined ? 0 : 1 }, { transform: 'translateY(0)', opacity: 1 }], { duration: 260, easing: 'cubic-bezier(.22,1,.36,1)' });
+    }
+  }
 }
 async function refresh() {
-  if (refreshInFlight || document.querySelector('.edit-input')) return;
+  if (refreshInFlight || priorityPicker.isOpen || busy.size || document.querySelector('.edit-input')) return;
   refreshInFlight = true;
-  try { const next = await request('GET', '/api/v1/today'); if (JSON.stringify(snapshot) !== JSON.stringify({ ...next, exportedAt: snapshot.exportedAt })) { snapshot = next; render(); } error(); }
+  try { const next = await request('GET', '/api/v1/today'); if (priorityPicker.isOpen || busy.size) return; if (JSON.stringify(snapshot) !== JSON.stringify({ ...next, exportedAt: snapshot.exportedAt })) { snapshot = next; render(); } error(); }
   catch(e) { error(e.message); } finally { refreshInFlight = false; }
+}
+async function setPriority(task, value) {
+  if (busy.has(task.id)) return;
+  const previous = task.priority;
+  busy.add(task.id);
+  task.priority = value;
+  render(undefined, task.id);
+  try {
+    const saved = await request('PATCH', `/api/v1/tasks/${task.id}`, { priority: value });
+    Object.assign(task, saved);
+    announce(`Priority ${value}`);
+    error();
+  } catch (e) { task.priority = previous; render(); error(e.message); }
+  finally {
+    busy.delete(task.id);
+    const control = $('tasks').querySelector(`[data-id="${CSS.escape(task.id)}"] .priority`);
+    if (control) control.disabled = false;
+    const check = $('tasks').querySelector(`[data-id="${CSS.escape(task.id)}"] .check`);
+    if (check) check.disabled = false;
+  }
 }
 async function toggle(task) {
   if (busy.has(task.id)) return;
@@ -46,7 +79,7 @@ async function toggle(task) {
   render(task.completedAt ? task.id : null);
   try { const saved = await request('PATCH', `/api/v1/tasks/${task.id}`, { done: !!task.completedAt }); Object.assign(task, saved); announce(saved.completedAt ? 'Completed' : 'Reopened'); error(); }
   catch(e) { Object.assign(task, old); render(); error(e.message); }
-  finally { busy.delete(task.id); const button = $('tasks').querySelector(`[data-id="${task.id}"] .check`); if (button) button.disabled = false; }
+  finally { busy.delete(task.id); const button = $('tasks').querySelector(`[data-id="${task.id}"] .check`); if (button) button.disabled = false; const flag = $('tasks').querySelector(`[data-id="${task.id}"] .priority`); if (flag) flag.disabled = false; }
 }
 function edit(task, label) {
   if (label.querySelector('input')) return;
@@ -57,10 +90,12 @@ function edit(task, label) {
   input.addEventListener('blur', () => finish(false));
 }
 async function changeExpanded(value) {
+  priorityPicker.close();
   if (!value) { document.querySelector('.sheet').classList.add('closing'); await new Promise(r => setTimeout(r, matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 150)); }
   if (api) await api.expand(value); else applyExpanded(value);
 }
 function applyExpanded(value) {
+  if (!value) priorityPicker.close();
   expanded = value; $('orb').hidden = value; document.querySelector('.sheet').hidden = !value; document.querySelector('.sheet').classList.remove('closing');
   if (value) { refresh(); setTimeout(() => $('task-input').focus(), 200); } else $('orb').focus();
 }

@@ -66,7 +66,7 @@ function renderDay(today) {
     if (task.completedAt) symbol.innerHTML='<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 8 3 3 7-7"/></svg>';
     const content=document.createElement('div'); content.className='day-task-content';
     const title=document.createElement('div'); title.className='day-task-title'; title.textContent=task.title;
-    if(task.priority && task.priority!=='normal'){const flag=document.createElement('i');flag.className=`priority-mark ${task.priority}`;flag.title=task.priority==='high'?'High':'Low';title.append(flag);}
+    if(task.priority && task.priority!=='normal'){const flag=document.createElement('i');flag.className=`priority-mark ${task.priority}`;flag.title=({urgent:'Urgent',high:'High',low:'Low'})[task.priority]||'Normal';title.append(flag);}
     content.append(title);
     const bits=[];
     if(task.completedDate && task.completedDate!==selected) bits.push(`Completed ${task.completedDate}`);

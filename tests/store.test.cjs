@@ -9,6 +9,18 @@ function fixture(t, start = '2026-10-26T12:00:00') {
   let time=new Date(start); const store=new Store(dir,()=>time);
   return {store,dir,setTime:value=>time=new Date(value)};
 }
+test('all four priorities persist, including urgent recurring tasks', t => {
+  const { store, dir } = fixture(t);
+  const task = store.add({ title: 'Four priorities', priority: 'urgent' });
+  for (const priority of ['low', 'normal', 'high', 'urgent']) {
+    store.update(task.id, { priority });
+    assert.equal(new Store(dir).snapshot().tasks[0].priority, priority);
+  }
+  store.addStrategy({ title: 'Daily review', priority: 'urgent', schedule: { type: 'interval', everyDays: 1 } });
+  assert.equal(store.snapshot().tasks.find(item => item.strategyId).priority, 'urgent');
+  assert.throws(() => store.update(task.id, { priority: 'invalid' }));
+  assert.equal(store.snapshot().tasks[0].priority, 'urgent');
+});
 test('tasks persist with priorities and retain original planning date across midnight', t => {
   const {store,dir,setTime}=fixture(t);const task=store.add({title:'复习章节',priority:'high'});
   setTime('2026-10-27T00:01:00');store.update(task.id,{done:true});
@@ -34,7 +46,7 @@ test('weekly and spaced review dates produce only due occurrences',t=>{
 });
 test('invalid dates and strategies fail without changing saved tasks',t=>{
   const {store}=fixture(t);assert.equal(validDate('2026-02-30'),false);assert.equal(validDate('2024-02-29'),true);assert.equal(addDays('2026-03-08',1),'2026-03-09');
-  assert.throws(()=>store.add({title:' ',date:'2026-10-26'}));assert.throws(()=>store.add({title:'ok',priority:'urgent'}));assert.throws(()=>store.addStrategy({title:'bad',schedule:{type:'interval',everyDays:0}}));assert.equal(store.snapshot().tasks.length,0);
+  assert.throws(()=>store.add({title:' ',date:'2026-10-26'}));assert.throws(()=>store.add({title:'ok',priority:'unknown'}));assert.throws(()=>store.addStrategy({title:'bad',schedule:{type:'interval',everyDays:0}}));assert.equal(store.snapshot().tasks.length,0);
 });
 test('corrupt existing data is preserved and never silently overwritten',t=>{
   const {dir}=fixture(t);const file=path.join(dir,'journal.json');fs.writeFileSync(file,'broken');assert.throws(()=>new Store(dir));assert.equal(fs.readFileSync(file,'utf8'),'broken');

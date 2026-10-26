@@ -109,7 +109,7 @@ app.whenReady().then(async () => {
     const task = service.store.snapshot().tasks.find(t => t.id === id); if (!task) return;
     Menu.buildFromTemplate([
       { label: 'Priority', enabled: false },
-      ...[['high', 'High'], ['normal', 'Normal'], ['low', 'Low']].map(([value,label]) => ({ label, type: 'radio', checked: (task.priority || 'normal') === value, click: () => { service.store.update(id, { priority: value }); win.webContents.send('window:expanded', expanded); } }))
+      ...[['urgent', 'Urgent'], ['high', 'High'], ['normal', 'Normal'], ['low', 'Low']].map(([value,label]) => ({ label, type: 'radio', checked: (task.priority || 'normal') === value, click: () => { service.store.update(id, { priority: value }); win.webContents.send('window:expanded', expanded); } }))
     ]).popup({ window: win });
   });
   ipcMain.on('window:history', event => { if (validSender(event)) openHistory(); });

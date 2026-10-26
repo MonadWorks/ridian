@@ -14,7 +14,8 @@
     "dev": "node scripts/serve.cjs",
     "test": "node --test tests/*.test.cjs",
     "build": "node scripts/build.cjs",
-    "package": "npm run build && electron-packager . Ridian --platform=darwin --arch=arm64 --out=release --overwrite --icon=assets/icon.icns --app-bundle-id=app.ridian.desktop --app-category-type=public.app-category.productivity --ignore='^/(release|tests|docs|scripts|[.]git|[.]vercel|node_modules|dist)(/|$)' && codesign --force --deep --sign - 'release/Ridian-darwin-arm64/Ridian.app'"
+    "package": "npm run build && electron-packager . Ridian --platform=darwin --arch=arm64 --out=release --overwrite --icon=assets/icon.icns --app-bundle-id=app.ridian.desktop --app-category-type=public.app-category.productivity --ignore='^/(release|tests|test-results|[.]test-data|[.]env[^/]*|docs|scripts|[.]git|[.]vercel|node_modules|dist)(/|$)' && codesign --force --deep --sign - 'release/Ridian-darwin-arm64/Ridian.app'",
+    "preview:widget": "node scripts/preview-widget.cjs"
   },
   "devDependencies": {
     "electron": "45.0.0",

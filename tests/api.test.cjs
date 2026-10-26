@@ -12,6 +12,9 @@ test('authenticated API separates reads and writes, blocks hostile origins, and 
   const allowed=await call('/api/v1/history',service.credentials.readToken,'GET',undefined,{Origin:'https://ridian.example'});assert.equal(allowed.status,200);assert.equal(allowed.headers.get('access-control-allow-origin'),'https://ridian.example');
   const created=await call('/api/v1/tasks',service.credentials.writeToken,'POST',{title:'AI 加入的复习',priority:'high'});assert.equal(created.status,200);const task=await created.json();
   const done=await call(`/api/v1/tasks/${task.id}`,service.credentials.writeToken,'PATCH',{done:true});assert.equal((await done.json()).completedDate,service.store.today());
+  const urgent=await call(`/api/v1/tasks/${task.id}`,service.credentials.writeToken,'PATCH',{priority:'urgent'});assert.equal(urgent.status,200);assert.equal((await urgent.json()).priority,'urgent');
+  const readOnly=await call(`/api/v1/tasks/${task.id}`,service.credentials.readToken,'PATCH',{priority:'low'});assert.equal(readOnly.status,403);
+  const persisted=await call('/api/v1/history',service.credentials.readToken);assert.equal((await persisted.json()).tasks[0].priority,'urgent');
   const rule=await call('/api/v1/strategies',service.credentials.writeToken,'POST',{title:'间隔复习',schedule:{type:'interval',everyDays:2}});assert.equal(rule.status,200);
   const today=await (await call('/api/v1/today',service.credentials.readToken)).json();assert.equal(today.tasks.length,2);
   const invalid=await call('/api/v1/tasks',service.credentials.writeToken,'POST',{title:'bad',date:'2026-02-30'});assert.equal(invalid.status,400);
