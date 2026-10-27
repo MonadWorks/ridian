@@ -49,7 +49,7 @@
 @media(prefers-reduced-motion:reduce){.priority-dot:after,.priority-spark:after{animation:none!important;opacity:.15}.priority-picker,.priority-range{animation:none;transition:none}}
 /* Reorder freely across priorities and completion states. */
 .list-scroll{position:relative}
-.task-text{cursor:text;user-select:none;border-radius:3px}
+.task-text{cursor:text;user-select:none;border-radius:3px;white-space:pre-wrap}
 .task-text:hover{color:#344c3a}
 .task-text:focus-visible{outline:1px solid #a5b79c;outline-offset:3px}
 .edit-input{display:block;min-height:22px;max-height:180px;resize:none;overflow-y:auto;line-height:1.65;border-bottom:1px solid #9aac91;border-radius:0;color:#4b534c;cursor:text;user-select:text}
