@@ -6,7 +6,7 @@ export function createTaskReorder({ list, canStart, move }) {
   marker.hidden = true;
   marker.setAttribute('aria-hidden', 'true');
   container.append(marker);
-  let active = null, scrollFrame = 0, dragAllowed = true;
+  let active = null, scrollFrame = 0, dragAllowed = true, suppressClick = false;
   const rows = () => [...list.querySelectorAll('.task')];
 
   function cancel() {
@@ -42,11 +42,13 @@ export function createTaskReorder({ list, canStart, move }) {
   }
 
   list.addEventListener('pointerdown', event => {
-    dragAllowed = event.button === 0 && !event.target.closest('input,.check,.priority,.delete');
+    suppressClick = false;
+    dragAllowed = event.button === 0 && !event.target.closest('input,textarea,.check,.priority,.delete');
   });
   list.addEventListener('dragstart', event => {
     const row = event.target.closest('.task');
-    if (!row || !dragAllowed || !canStart() || event.target.closest('input,.check,.priority,.delete') || row.querySelector('.edit-input')) { event.preventDefault(); return; }
+    if (!row || !dragAllowed || !canStart() || event.target.closest('input,textarea,.check,.priority,.delete') || row.querySelector('.edit-input')) { event.preventDefault(); return; }
+    suppressClick = true;
     active = { row, id: row.dataset.id, y: event.clientY, hasTarget: false };
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData('text/plain', row.dataset.id);
@@ -103,5 +105,5 @@ export function createTaskReorder({ list, canStart, move }) {
     handle.innerHTML = '<svg viewBox="0 0 12 18" aria-hidden="true"><circle cx="4" cy="5" r=".8"/><circle cx="8" cy="5" r=".8"/><circle cx="4" cy="9" r=".8"/><circle cx="8" cy="9" r=".8"/><circle cx="4" cy="13" r=".8"/><circle cx="8" cy="13" r=".8"/></svg>';
     row.prepend(handle);
   }
-  return { attach, cancel, get isDragging() { return !!active; } };
+  return { attach, cancel, get isDragging() { return !!active; }, get suppressClick() { return suppressClick; } };
 }

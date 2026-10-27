@@ -8,7 +8,7 @@ const { localDate, validDate, addDays, tasksForDate } = window.RidianDates;
 const api = window.ridian;
 const $ = id => document.getElementById(id);
 let expanded = false, snapshot = { tasks: [], today: '' }, busy = new Set(), refreshInFlight = false, reorderSaving = false;
-let selectedDate = '', adding = false, revision = 0;
+let selectedDate = '', adding = false, revision = 0, activeEdit = null;
 const today = () => snapshot.today || localDate();
 const viewedDate = () => selectedDate || today();
 const viewedTasks = () => tasksForDate(snapshot.tasks, viewedDate(), today());
@@ -46,6 +46,7 @@ function selectDate(date) {
   announce($('today-date').textContent);
 }
 function render(justDone, priorityChanged) {
+  if (activeEdit) return;
   const previousPositions = new Map([...document.querySelectorAll('.task')].map(row => [row.dataset.id, row.getBoundingClientRect().top]));
   if (selectedDate === today()) selectedDate = '';
   const date = viewedDate(), visible = orderTasks(viewedTasks(), snapshot.taskOrder);
@@ -69,22 +70,23 @@ function render(justDone, priorityChanged) {
   const fragment = document.createDocumentFragment();
   for (const task of visible) {
     const li = document.createElement('li'); li.className = `task${task.completedAt ? ' done' : ''}${task.id === justDone ? ' just-done' : ''}`; li.dataset.id = task.id;
-    li.addEventListener('contextmenu', e => { e.preventDefault(); e.stopPropagation(); api?.taskMenu(task.id); });
+    li.addEventListener('contextmenu', e => { if (e.target.closest('input,textarea')) { e.stopPropagation(); return; } e.preventDefault(); e.stopPropagation(); api?.taskMenu(task.id); });
     const check = document.createElement('button'); check.className = 'check'; check.setAttribute('role', 'checkbox'); check.setAttribute('aria-checked', !!task.completedAt); check.setAttribute('aria-label', task.title); check.disabled = busy.has(task.id) || reorderSaving;
     check.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 8 3 3 7-7"/></svg>';
-    check.addEventListener('click', () => toggle(task));
-    const label = document.createElement('span'); label.className = 'task-text'; label.textContent = task.title; label.title = 'Drag to reorder · Double-click to edit';
+    check.addEventListener('click', async () => { if (activeEdit && !await finishEditing()) return; toggle(task); });
+    const label = document.createElement('span'); label.className = 'task-text'; label.textContent = task.title; label.title = 'Click to edit'; label.tabIndex = 0; label.setAttribute('role', 'button'); label.setAttribute('aria-label', `Edit ${task.title}`);
     const flag = priorityPicker.create(task);
     flag.disabled = busy.has(task.id) || reorderSaving;
     if (task.id === priorityChanged) flag.classList.add('priority-confirmed');
-    label.addEventListener('dblclick', () => edit(task, label));
+    label.addEventListener('click', event => { if (!event.target.closest('.edit-input') && (event.detail === 0 || !taskReorder.suppressClick)) edit(task, label); });
+    label.addEventListener('keydown', event => { if (event.target === label && ['Enter', ' ', 'F2'].includes(event.key)) { event.preventDefault(); event.stopPropagation(); edit(task, label); } });
     const remove = document.createElement('button'); remove.className = 'delete'; remove.textContent = '×'; remove.setAttribute('aria-label', `Delete ${task.title}`);
     remove.disabled = busy.has(task.id) || reorderSaving;
-    remove.addEventListener('click', async () => { if (busy.has(task.id)) return; busy.add(task.id); revision++; updateNavigation(); try { await request('DELETE', `/api/v1/tasks/${task.id}`); snapshot.tasks = snapshot.tasks.filter(item => item.id !== task.id); render(); announce('Task deleted'); } catch(e) { error(e.message); } finally { busy.delete(task.id); updateNavigation(); } });
+    remove.addEventListener('click', async () => { if (activeEdit && !await finishEditing()) return; if (busy.has(task.id)) return; busy.add(task.id); revision++; updateNavigation(); try { await request('DELETE', `/api/v1/tasks/${task.id}`); snapshot.tasks = snapshot.tasks.filter(item => item.id !== task.id); render(); announce('Task deleted'); } catch(e) { error(e.message); } finally { busy.delete(task.id); updateNavigation(); } });
     li.append(check, label, flag, remove); taskReorder.attach(li, task); fragment.append(li);
   }
   const focused = document.activeElement.closest?.('[data-id]')?.dataset.id;
-  const focusedControl = document.activeElement.classList.contains('priority') ? '.priority' : document.activeElement.classList.contains('reorder-handle') ? '.reorder-handle' : '.check';
+  const focusedControl = document.activeElement.classList.contains('priority') ? '.priority' : document.activeElement.classList.contains('reorder-handle') ? '.reorder-handle' : document.activeElement.classList.contains('task-text') ? '.task-text' : '.check';
   $('tasks').replaceChildren(fragment);
   if (focused) $('tasks').querySelector(`[data-id="${CSS.escape(focused)}"] ${focusedControl}`)?.focus({ preventScroll: true });
   if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
@@ -121,6 +123,7 @@ async function refresh() {
   catch(e) { error(e.message); } finally { refreshInFlight = false; }
 }
 async function setPriority(task, value) {
+  if (activeEdit && !await finishEditing()) return;
   if (busy.has(task.id)) return;
   const previous = task.priority;
   busy.add(task.id);
@@ -156,14 +159,61 @@ async function toggle(task) {
   catch(e) { Object.assign(task, old); snapshot.taskOrder = oldOrder; render(); error(e.message); }
   finally { busy.delete(task.id); updateNavigation(); for (const control of $('tasks').querySelectorAll(`[data-id="${CSS.escape(task.id)}"] button`)) control.disabled = false; }
 }
-function edit(task, label) {
-  if (label.querySelector('input')) return;
-  label.closest('.task').draggable = false;
-  const input = document.createElement('input'); input.className = 'edit-input'; input.value = task.title; input.maxLength = 240; input.setAttribute('aria-label', 'Edit task');
-  label.replaceChildren(input); input.focus(); input.select(); let committed = false;
-  updateNavigation();
-  const finish = async cancel => { if (committed) return; committed = true; if (!cancel && input.value.trim() && input.value.trim() !== task.title) { revision++; try { const saved = await request('PATCH', `/api/v1/tasks/${task.id}`, { title: input.value }); Object.assign(task, saved); } catch(e) { error(e.message); } } input.remove(); render(); };
-  input.addEventListener('keydown', e => { if (e.isComposing) return; if (e.key === 'Enter') { e.preventDefault(); finish(false); } if (e.key === 'Escape') { e.stopPropagation(); finish(true); } });
+function finishEditing() { return activeEdit ? activeEdit.finish(false) : Promise.resolve(true); }
+async function edit(task, label) {
+  if (activeEdit?.id === task.id) return;
+  if (activeEdit && !await finishEditing()) return;
+  if (busy.size || adding || reorderSaving || taskReorder.isDragging || !label.isConnected) return;
+  priorityPicker.close(); calendar.close(); error();
+  const row = label.closest('.task'); row.draggable = false; row.classList.add('editing');
+  label.removeAttribute('role'); label.removeAttribute('tabindex'); label.removeAttribute('aria-label');
+  const input = document.createElement('textarea'); input.className = 'edit-input'; input.value = task.title; input.maxLength = 240; input.rows = 1; input.setAttribute('aria-label', 'Edit task'); input.title = 'Enter to save · Esc to cancel';
+  label.replaceChildren(input);
+  const resize = () => { input.style.height = 'auto'; input.style.height = `${Math.max(22, input.scrollHeight)}px`; };
+  const editor = { id: task.id, pending: null, composing: false, finish };
+  activeEdit = editor;
+  resize(); input.focus(); input.select(); updateNavigation();
+  function close(restoreFocus) {
+    if (activeEdit !== editor) return;
+    activeEdit = null;
+    row.draggable = true; row.classList.remove('editing');
+    label.textContent = task.title; label.tabIndex = 0; label.setAttribute('role', 'button'); label.setAttribute('aria-label', `Edit ${task.title}`);
+    row.querySelector('.check').setAttribute('aria-label', task.title);
+    row.querySelector('.delete').setAttribute('aria-label', `Delete ${task.title}`);
+    row.querySelector('.reorder-handle').setAttribute('aria-label', `Move ${task.title}`);
+    const priorityLabel = (task.priority || 'normal').replace(/^./, letter => letter.toUpperCase());
+    row.querySelector('.priority').setAttribute('aria-label', `Priority: ${priorityLabel} — ${task.title}`);
+    updateNavigation();
+    if (restoreFocus) label.focus({ preventScroll: true });
+  }
+  function finish(cancel, restoreFocus = false) {
+    if (editor.pending) return editor.pending;
+    if (activeEdit !== editor) return Promise.resolve(true);
+    if (cancel) { close(restoreFocus); error(); return Promise.resolve(true); }
+    if (editor.composing) return Promise.resolve(false);
+    const title = input.value.trim();
+    if (!title || title.length > 240) {
+      error(title ? 'Use up to 240 characters.' : 'Add a task title.'); input.setAttribute('aria-invalid', 'true'); input.focus(); return Promise.resolve(false);
+    }
+    if (title === task.title) { close(restoreFocus); error(); return Promise.resolve(true); }
+    busy.add(task.id); revision++; input.readOnly = true; input.setAttribute('aria-busy', 'true'); updateNavigation();
+    editor.pending = (async () => {
+      try {
+        const saved = await request('PATCH', `/api/v1/tasks/${task.id}`, { title });
+        Object.assign(task, saved); error(); announce('Task updated'); close(restoreFocus); return true;
+      } catch (e) { error(e.message); input.setAttribute('aria-invalid', 'true'); input.focus(); return false; }
+      finally { busy.delete(task.id); editor.pending = null; input.readOnly = false; input.removeAttribute('aria-busy'); updateNavigation(); }
+    })();
+    return editor.pending;
+  }
+  input.addEventListener('input', () => { input.removeAttribute('aria-invalid'); error(); resize(); });
+  input.addEventListener('compositionstart', () => { editor.composing = true; });
+  input.addEventListener('compositionend', () => { editor.composing = false; if (document.activeElement !== input) finish(false); });
+  input.addEventListener('keydown', event => {
+    if (event.isComposing || editor.composing || event.keyCode === 229) { event.stopPropagation(); return; }
+    if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); event.stopPropagation(); finish(false, true); }
+    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); finish(true, true); }
+  });
   input.addEventListener('blur', () => finish(false));
 }
 async function changeExpanded(value) {
@@ -176,7 +226,7 @@ async function changeExpanded(value) {
 function applyExpanded(value) {
   if (!value) { priorityPicker.close(); calendar.close(); taskReorder.cancel(); }
   expanded = value; $('orb').hidden = value; document.querySelector('.sheet').hidden = !value; document.querySelector('.sheet').classList.remove('closing');
-  if (value) { render(); refresh(); setTimeout(() => { if (!calendar.isOpen && !priorityPicker.isOpen) $('task-input').focus(); }, 200); } else $('orb').focus();
+  if (value) { render(); refresh(); setTimeout(() => { if (!activeEdit && !calendar.isOpen && !priorityPicker.isOpen) $('task-input').focus(); }, 200); } else $('orb').focus();
 }
 api?.onExpanded(applyExpanded);
 api?.onToday?.(() => selectDate(today()));
@@ -186,12 +236,12 @@ $('history').onclick = () => api?.history();
 $('previous-date').onclick = () => selectDate(addDays(viewedDate(), -1));
 $('next-date').onclick = () => selectDate(addDays(viewedDate(), 1));
 $('return-today').onclick = () => selectDate(today());
-document.addEventListener('contextmenu', e => { if (e.target.tagName !== 'INPUT') { e.preventDefault(); api?.menu(); } });
+document.addEventListener('contextmenu', e => { if (!e.target.closest('input,textarea')) { e.preventDefault(); api?.menu(); } });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && expanded) changeExpanded(false); });
 $('widget').addEventListener('mouseenter', () => api?.hover(true));
 $('widget').addEventListener('mouseleave', () => api?.hover(false));
 $('add-form').addEventListener('submit', async e => {
-  e.preventDefault(); const input = $('task-input'); const title = input.value.trim(); if (!title || input.disabled || reorderSaving || busy.size) return;
+  e.preventDefault(); if (activeEdit && !await finishEditing()) return; const input = $('task-input'); const title = input.value.trim(); if (!title || input.disabled || reorderSaving || busy.size) return;
   priorityPicker.close();
   calendar.close();
   const date = viewedDate(); adding = true; revision++; updateNavigation();

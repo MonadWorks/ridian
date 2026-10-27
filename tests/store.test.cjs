@@ -51,3 +51,18 @@ test('invalid dates and strategies fail without changing saved tasks',t=>{
 test('corrupt existing data is preserved and never silently overwritten',t=>{
   const {dir}=fixture(t);const file=path.join(dir,'journal.json');fs.writeFileSync(file,'broken');assert.throws(()=>new Store(dir));assert.equal(fs.readFileSync(file,'utf8'),'broken');
 });
+
+test('editing a scheduled completed task persists without replacing its identity, dates, or order', t => {
+  const { store, dir, setTime } = fixture(t);
+  const first = store.add({ title: 'Original title', date: '2026-10-28', priority: 'high' });
+  const second = store.add({ title: 'Second task', date: '2026-10-28' });
+  store.update(first.id, { done: true });
+  store.reorder({ id: first.id, beforeId: second.id, date: '2026-10-28' });
+  const before = store.snapshot(), original = before.tasks[0];
+  setTime('2026-10-27T12:00:00');
+  store.update(first.id, { title: '重新编辑的事项' });
+  const saved = new Store(dir).snapshot();
+  assert.equal(saved.tasks.length, before.tasks.length);
+  assert.deepEqual(saved.tasks[0], { ...original, title: '重新编辑的事项', updatedAt: new Date('2026-10-27T12:00:00').toISOString() });
+  assert.deepEqual(saved.taskOrder, before.taskOrder);
+});

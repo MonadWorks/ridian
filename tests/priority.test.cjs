@@ -8,10 +8,11 @@ const { parseHTML } = require('linkedom');
 const root = path.join(__dirname, '..');
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
-async function fixture({ tasks = [], taskOrder = [], reducedMotion = true, failCreate = false, failReorder = false } = {}) {
+async function fixture({ tasks = [], taskOrder = [], reducedMotion = true, failCreate = false, failReorder = false, failEdit = false } = {}) {
   const { window, document } = parseHTML(fs.readFileSync(path.join(root, 'web/widget.html'), 'utf8'));
   Object.defineProperty(document, 'activeElement', { value: document.body, writable: true });
   window.HTMLElement.prototype.focus = function () { this.ownerDocument.activeElement = this; };
+  window.HTMLElement.prototype.select = function () {};
   window.HTMLElement.prototype.animate = () => {};
   window.HTMLElement.prototype.getBoundingClientRect = function () {
     return this.classList.contains('sheet') ? { left: 12, right: 344, top: 12, bottom: 456, width: 332, height: 444 } : { left: 240, right: 304, top: 370, bottom: 398, width: 64, height: 28 };
@@ -40,6 +41,7 @@ async function fixture({ tasks = [], taskOrder = [], reducedMotion = true, failC
         state.tasks.push(task); return structuredClone(task);
       }
       if (method === 'PATCH') {
+        if (failEdit && 'title' in body) throw new Error('Test edit save failed');
         const task = state.tasks.find(item => route.endsWith(item.id));
         Object.assign(task, body);
         if ('done' in body) { task.completedAt = body.done ? `${state.today}T12:00:00Z` : null; task.completedDate = body.done ? state.today : null; state.taskOrder = state.taskOrder.filter(id => id !== task.id); }
@@ -321,4 +323,114 @@ test('failed future creation and collapse retain the draft and its selected day'
   assert.equal(f.$('#task-input').value, 'Try later');
   assert.equal(f.$('#next-date').disabled, false);
   assert.equal(f.$('#error').textContent, 'Test save failed');
+});
+
+test('a single click edits in place, saves with Enter, and preserves task identity and metadata', async () => {
+  const f = await fixture({ tasks: sampleTasks, taskOrder: ['low', 'high', 'done'] });
+  const original = structuredClone(f.state.tasks[0]);
+  f.event(f.$('[data-id="high"] .task-text'), 'click');
+  const input = f.$('.edit-input'); assert.ok(input); assert.equal(input.value, 'High task');
+  input.value = 'Updated task'; f.event(input, 'keydown', { key: 'Enter' }); await flush();
+  assert.equal(f.$('.edit-input'), null);
+  assert.equal(f.$('[data-id="high"] .task-text').textContent, 'Updated task');
+  assert.deepEqual(f.state.tasks[0], { ...original, title: 'Updated task' });
+  assert.deepEqual(displayedIds(f), ['low', 'high', 'done']);
+  assert.equal(f.calls.filter(call => call.method === 'POST' || call.method === 'DELETE').length, 0);
+  assert.equal(f.calls.filter(call => call.method === 'PATCH').length, 1);
+  assert.equal(f.document.activeElement, f.$('[data-id="high"] .task-text'));
+  assert.equal(f.$('[data-id="high"] .check').getAttribute('aria-label'), 'Updated task');
+  await vm.runInContext('refresh()', f.context);
+  assert.equal(f.$('[data-id="high"] .task-text').textContent, 'Updated task');
+});
+
+test('blur saves future tasks and keyboard activation edits completed tasks without reopening them', async () => {
+  const f = await fixture({ tasks: [...plannedTasks, ...sampleTasks.slice(2)] });
+  f.event(f.$('#next-date'), 'click');
+  f.event(f.$('[data-id="tomorrow"] .task-text'), 'click');
+  f.$('.edit-input').value = 'Updated tomorrow'; f.event(f.$('.edit-input'), 'blur'); await flush();
+  assert.equal(f.state.tasks.find(task => task.id === 'tomorrow').date, '2026-10-27');
+  assert.equal(f.$('.task-text').textContent, 'Updated tomorrow');
+  f.event(f.$('#return-today'), 'click');
+  const original = structuredClone(f.state.tasks.find(task => task.id === 'done'));
+  f.event(f.$('[data-id="done"] .task-text'), 'keydown', { key: 'F2' });
+  f.$('.edit-input').value = 'Updated completed task'; f.event(f.$('.edit-input'), 'keydown', { key: 'Enter' }); await flush();
+  assert.deepEqual(f.state.tasks.find(task => task.id === 'done'), { ...original, title: 'Updated completed task' });
+  assert.equal(f.$('[data-id="done"]').classList.contains('done'), true);
+});
+
+test('Escape cancels editing and blank titles stay editable without deleting the task', async () => {
+  const f = await fixture({ tasks: sampleTasks });
+  f.event(f.$('[data-id="high"] .task-text'), 'click');
+  f.$('.edit-input').value = 'Changed draft'; f.event(f.$('.edit-input'), 'keydown', { key: 'Escape' }); await flush();
+  assert.equal(f.state.tasks[0].title, 'High task'); assert.equal(f.$('.sheet').hidden, false);
+  assert.equal(f.$('.edit-input'), null);
+  f.event(f.$('[data-id="high"] .task-text'), 'click');
+  f.$('.edit-input').value = '  '; f.event(f.$('.edit-input'), 'keydown', { key: 'Enter' }); await flush();
+  assert.equal(f.$('.edit-input').getAttribute('aria-invalid'), 'true');
+  assert.equal(f.state.tasks.length, 3); assert.equal(f.calls.filter(call => call.method === 'PATCH').length, 0);
+  f.$('.edit-input').value = 'Valid title'; f.event(f.$('.edit-input'), 'input');
+  f.event(f.$('.edit-input'), 'keydown', { key: 'Enter' }); await flush();
+  assert.equal(f.state.tasks[0].title, 'Valid title');
+});
+
+test('Chinese composition finishes before Enter saves; refresh and re-expansion preserve an edit', async () => {
+  const f = await fixture({ tasks: sampleTasks });
+  f.event(f.$('[data-id="high"] .task-text'), 'click');
+  const input = f.$('.edit-input'); input.value = '复习神经网络';
+  f.event(input, 'compositionstart');
+  f.event(input, 'keydown', { key: 'Enter', isComposing: true });
+  assert.equal(f.calls.filter(call => call.method === 'PATCH').length, 0);
+  await vm.runInContext('refresh()', f.context); f.api.expand(true);
+  assert.equal(f.$('.edit-input'), input); assert.equal(input.value, '复习神经网络');
+  f.event(input, 'compositionend');
+  f.event(input, 'keydown', { key: 'Enter', shiftKey: true });
+  assert.equal(f.calls.filter(call => call.method === 'PATCH').length, 0);
+  f.event(input, 'keydown', { key: 'Enter' }); await flush();
+  assert.equal(f.state.tasks[0].title, '复习神经网络');
+});
+
+test('failed edits retain the complete draft and can be retried', async () => {
+  const f = await fixture({ tasks: sampleTasks, failEdit: true });
+  f.event(f.$('[data-id="high"] .task-text'), 'click');
+  const input = f.$('.edit-input'); input.value = 'Keep this edited draft';
+  f.event(input, 'keydown', { key: 'Enter' }); await flush();
+  assert.equal(f.state.tasks[0].title, 'High task');
+  assert.equal(f.$('.edit-input'), input); assert.equal(input.value, 'Keep this edited draft');
+  assert.equal(input.readOnly, false); assert.equal(f.$('#error').textContent, 'Test edit save failed');
+  f.api.request = async (method, route, body) => {
+    assert.equal(method, 'PATCH'); assert.equal(route, '/api/v1/tasks/high');
+    const saved = { ...f.state.tasks[0], title: body.title }; Object.assign(f.state.tasks[0], saved); return saved;
+  };
+  f.event(input, 'keydown', { key: 'Enter' }); await flush();
+  assert.equal(f.$('.edit-input'), null);
+  assert.equal(f.$('[data-id="high"] .task-text').textContent, 'Keep this edited draft');
+});
+
+test('one pending edit save handles Enter and blur once, then completes the clicked checkbox', async () => {
+  const f = await fixture({ tasks: sampleTasks });
+  f.event(f.$('[data-id="high"] .task-text'), 'click');
+  const input = f.$('.edit-input'); input.value = 'Rename then complete';
+  const original = f.api.request; let release;
+  f.api.request = (method, route, body) => body?.title ? new Promise(resolve => { release = () => resolve(original(method, route, body)); }) : original(method, route, body);
+  f.event(input, 'keydown', { key: 'Enter' }); f.event(input, 'blur');
+  f.event(f.$('[data-id="high"] .check'), 'click');
+  assert.equal(input.readOnly, true);
+  release(); await flush();
+  const changes = f.calls.filter(call => call.method === 'PATCH');
+  assert.equal(changes.length, 2); assert.equal(changes[0].body.title, 'Rename then complete'); assert.equal(changes[1].body.done, true);
+  assert.ok(f.state.tasks[0].completedAt);
+  assert.equal(f.$('.edit-input'), null);
+});
+
+test('dragging still reorders and its trailing click does not start an edit', async () => {
+  const f = await fixture({ tasks: sampleTasks });
+  const transfer = { setData() {}, setDragImage() {} };
+  f.event(f.$('[data-id="high"] .task-text'), 'dragstart', { dataTransfer: transfer, clientX: 260, clientY: 375 });
+  f.event(f.$('.list-scroll'), 'drop', { dataTransfer: transfer, clientY: 450 }); await flush();
+  f.event(f.$('[data-id="high"] .task-text'), 'click', { detail: 1 });
+  assert.equal(f.$('.edit-input'), null);
+  assert.deepEqual(displayedIds(f), ['low', 'done', 'high']);
+  f.event(f.$('[data-id="high"] .task-text'), 'pointerdown', { button: 0 });
+  f.event(f.$('[data-id="high"] .task-text'), 'click', { detail: 1 });
+  assert.ok(f.$('.edit-input'));
 });
