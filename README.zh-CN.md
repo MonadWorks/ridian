@@ -46,6 +46,8 @@ open release/Ridian-darwin-arm64/Ridian.app
 ## 使用
 
 - 打开 `Ridian.app`。点击小圆点展开，点击右上角横线或按 Esc 收起。
+- 用标题旁的小箭头切换日期；点击日期打开英文小日历，直接跳到某一天。有任务的日期会带一个小圆点。离开今天后，点击带圆点的日历图标即可回到今天。
+- 切到未来日期后添加任务，就会按所选优先级安排到那一天。未来日期显示当天安排的任务，今天汇总到期任务和此前未完成的事项；每一天都支持自由拖动排序。悬浮球始终显示今天的待办数量。收起再展开时保留所选日期和输入草稿，重启应用回到今天。停留在 Today 时跨午夜会跟随新一天，明确选中的日期则保持不变。提前完成未来任务时，会记录实际完成日期，并保留原计划日期。
 - 拖动小圆点或面板标题移动位置。切换到其他应用后淡为半透明，移回鼠标恢复。
 - 输入事项，回车添加；点击圆圈完成，再次点击撤销。双击文字编辑。
 - 在「Add a task」右侧点击优先级按钮即可先选择，再添加事项。横向拖动白色滑块，轨道颜色连续变化，松手吸附到「Low / Normal / High / Urgent」四档之一；成功添加后回到 Normal。已有事项点击右侧圆点使用同一滑轴。← / → 选择、Enter 确认、Esc 取消。使用默认排序时，更改优先级会让清单平滑重排；手动顺序会保留。右键菜单也可设置优先级。
@@ -86,7 +88,7 @@ open release/Ridian-darwin-arm64/Ridian.app
 | POST | `/api/v1/tasks` | 添加事项 |
 | PATCH | `/api/v1/tasks/:id` | 更新标题、优先级、计划日期或完成状态 |
 | DELETE | `/api/v1/tasks/:id` | 删除事项 |
-| POST | `/api/v1/order` | 手动移动今日事项：`{"id":"task-id","beforeId":"target-id"}`，`beforeId:null` 移到最后 |
+| POST | `/api/v1/order` | 手动移动事项：`{"id":"task-id","beforeId":"target-id","date":"2026-10-27"}`；`date` 默认今天，`beforeId:null` 移到所选日期清单的最后 |
 | DELETE | `/api/v1/order` | 恢复默认排序 |
 | GET / POST | `/api/v1/strategies` | 查看 / 新增重复策略 |
 | PATCH / DELETE | `/api/v1/strategies/:id` | 更新 / 删除策略 |

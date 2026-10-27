@@ -7,5 +7,6 @@ contextBridge.exposeInMainWorld('ridian', {
   menu: () => ipcRenderer.send('window:menu'),
   taskMenu: id => ipcRenderer.send('task:menu', id),
   history: () => ipcRenderer.send('window:history'),
+  onToday: callback => { const listener = () => callback(); ipcRenderer.on('window:today', listener); return () => ipcRenderer.removeListener('window:today', listener); },
   onExpanded: callback => { const listener = (_, value) => callback(value); ipcRenderer.on('window:expanded', listener); return () => ipcRenderer.removeListener('window:expanded', listener); }
 });

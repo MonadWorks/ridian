@@ -46,6 +46,8 @@ The [online history page](https://ridian-journal.vercel.app) can connect to Ridi
 ## Using Ridian
 
 - Open `Ridian.app`. Click the orb to expand it. Click the minus button in the upper right or press **Esc** to collapse it.
+- Use the small arrows beside the heading to switch days. Click the date to open an English calendar and jump to any day; a subtle dot marks dates with tasks. Away from today, the calendar-with-a-dot icon takes you straight back to today.
+- Add a task while viewing a future date to schedule it for that day, with your chosen priority. Future dates show their scheduled tasks; today includes due tasks and unfinished carryover. Each day's list supports free reordering. The orb always counts today's pending tasks. Your selected day and draft stay in place when you collapse and reopen the panel; restarting opens today. The Today view advances at midnight, while an explicitly selected date stays selected. Completing a future task early records the actual completion day and retains its planned date.
 - Drag the orb or the panel header to move it. Switch to another app to make it translucent; hover over Ridian to restore its opacity.
 - Type a task and press **Enter** to add it. Click its circle to complete it, or click again to undo. Double-click the text to edit.
 - Set a priority **before adding a task** using the button beside **Add a task**. Drag the white slider horizontally: the track changes color continuously, then snaps to **Low / Normal / High / Urgent** on release. It resets to Normal after a successful addition. Click an existing task's colored dot to use the same slider. Use **← / →** to select, **Enter** to confirm, or **Esc** to cancel. Priority changes animate the list into its new order where the default ordering applies. Priority is also available in the context menu.
@@ -86,7 +88,7 @@ Copy a read-only or read/write configuration from Ridian's **AI access** menu. A
 | POST | `/api/v1/tasks` | Add a task |
 | PATCH | `/api/v1/tasks/:id` | Update title, priority, planned date, or completion state |
 | DELETE | `/api/v1/tasks/:id` | Delete a task |
-| POST | `/api/v1/order` | Move a task in today's list: `{"id":"task-id","beforeId":"target-id"}`; use `beforeId:null` to move it to the end |
+| POST | `/api/v1/order` | Move a task: `{"id":"task-id","beforeId":"target-id","date":"2026-10-27"}`; `date` defaults to today, and `beforeId:null` moves it to the end of that day's list |
 | DELETE | `/api/v1/order` | Restore the default order |
 | GET / POST | `/api/v1/strategies` | List / create recurring strategies |
 | PATCH / DELETE | `/api/v1/strategies/:id` | Update / delete a strategy |

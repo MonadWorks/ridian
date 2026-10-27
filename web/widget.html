@@ -8,7 +8,14 @@
   </button>
   <section class="sheet" aria-label="Today" hidden>
     <header class="sheet-header" id="drag-handle">
-      <div><p id="today-date" class="eyebrow"></p><h1>Today<span class="heading-dot">.</span></h1></div>
+      <div class="date-heading">
+        <button type="button" id="choose-date" class="eyebrow date-trigger" aria-label="Choose a date"><span id="today-date"></span><svg viewBox="0 0 12 12" aria-hidden="true"><path d="m3 4.5 3 3 3-3"/></svg></button>
+        <div class="day-heading"><h1><span id="day-title">Today</span><span class="heading-dot">.</span></h1><nav class="day-navigation" aria-label="Day navigation">
+          <button type="button" id="previous-date" class="icon-button day-step" aria-label="Previous day" title="Previous day"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m12 6-4 4 4 4"/></svg></button>
+          <button type="button" id="return-today" class="icon-button today-button" aria-label="Back to today" title="Back to today" hidden><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="4" y="5" width="12" height="11" rx="2"/><path d="M7 3.5v3M13 3.5v3M4 9h12"/><circle cx="10" cy="12.5" r="1" fill="currentColor" stroke="none"/></svg></button>
+          <button type="button" id="next-date" class="icon-button day-step" aria-label="Next day" title="Next day"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m8 6 4 4-4 4"/></svg></button>
+        </nav></div>
+      </div>
       <button id="collapse" class="icon-button" aria-label="Collapse" title="Collapse · Esc"><svg viewBox="0 0 20 20"><path d="M5 10h10"/></svg></button>
     </header>
     <div class="list-scroll"><ul id="tasks" class="tasks"></ul><div id="empty" class="empty"><span class="empty-orbit" aria-hidden="true">·</span></div></div>

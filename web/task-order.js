@@ -23,7 +23,7 @@
   }
   function moveOrder(tasks, manualOrder, id, beforeId) {
     const visible = orderTasks(tasks, manualOrder).map(task => task.id);
-    if (!visible.includes(id) || (beforeId !== null && !visible.includes(beforeId))) throw new Error('Task is no longer in today’s list.');
+    if (!visible.includes(id) || (beforeId !== null && !visible.includes(beforeId))) throw new Error('Task is no longer in this day’s list.');
     if (id === beforeId) return [...(manualOrder || [])];
     const next = visible.filter(item => item !== id);
     next.splice(beforeId === null ? next.length : next.indexOf(beforeId), 0, id);

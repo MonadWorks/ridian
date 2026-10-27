@@ -23,6 +23,14 @@ test('authenticated API separates reads and writes, blocks hostile origins, and 
   assert.equal((await call('/api/v1/order',service.credentials.readToken,'DELETE')).status,403);
   assert.equal((await call('/api/v1/order',service.credentials.writeToken,'DELETE')).status,200);
   const reset=await (await call('/api/v1/today',service.credentials.readToken)).json();assert.equal(reset.tasks.at(-1).id,task.id);
+  const futureDate=require('../web/dates.js').addDays(service.store.today(),3);
+  const futureA=await (await call('/api/v1/tasks',service.credentials.writeToken,'POST',{title:'Plan ahead',date:futureDate,priority:'urgent'})).json();
+  const futureB=await (await call('/api/v1/tasks',service.credentials.writeToken,'POST',{title:'Another plan',date:futureDate,priority:'low'})).json();
+  assert.equal((await call('/api/v1/order',service.credentials.writeToken,'POST',{id:futureB.id,beforeId:futureA.id,date:futureDate})).status,200);
+  const futureList=await (await call(`/api/v1/tasks?date=${futureDate}`,service.credentials.readToken)).json();assert.equal(futureList.tasks.length,2);
+  const stillToday=await (await call('/api/v1/today',service.credentials.readToken)).json();assert.equal(stillToday.tasks.length,2);
+  assert.equal((await call('/api/v1/order',service.credentials.writeToken,'POST',{id:task.id,beforeId:futureA.id,date:futureDate})).status,400);
+  assert.equal((await call('/api/v1/order',service.credentials.readToken,'POST',{id:futureA.id,beforeId:null,date:futureDate})).status,403);
   const invalid=await call('/api/v1/tasks',service.credentials.writeToken,'POST',{title:'bad',date:'2026-02-30'});assert.equal(invalid.status,400);
   const forged=await new Promise(resolve=>{const req=http.get(base+'/api/v1/history',{headers:{Host:'evil.example',Authorization:`Bearer ${service.credentials.readToken}`}},res=>{res.resume();resolve(res.statusCode);});req.on('error',()=>resolve(0));});assert.equal(forged,403);
 });

@@ -48,7 +48,7 @@ function openHistory(online = false) {
 }
 function showMenu() {
   const menu = Menu.buildFromTemplate([
-    { label: 'Today', accelerator: 'CommandOrControl+Shift+Space', click: () => setExpanded(true) },
+    { label: 'Today', accelerator: 'CommandOrControl+Shift+Space', click: () => { setExpanded(true); win.webContents.send('window:today'); } },
     { label: 'History', click: () => openHistory() },
     ...(cloudUrl ? [{ label: 'Online history', click: () => openHistory(true) }] : []),
     { type: 'separator' },

@@ -19,7 +19,7 @@ async function fixture({ tasks = [], taskOrder = [], reducedMotion = true, failC
   Object.defineProperty(window.HTMLElement.prototype, 'clientWidth', { configurable: true, get() { return 248; } });
   let now = 0, nextFrame = 0;
   const frames = new Map(), calls = [];
-  const state = { tasks: structuredClone(tasks), taskOrder, today: '2026-10-26', exportedAt: '2026-10-26T12:00:00Z' };
+  const state = { tasks: structuredClone(tasks).map(task => ({ ...task, completedDate: task.completedDate ?? (task.completedAt ? task.date : null) })), taskOrder, today: '2026-10-26', exportedAt: '2026-10-26T12:00:00Z' };
   let expandedCallback;
   window.ridian = {
     onExpanded(callback) { expandedCallback = callback; },
@@ -30,24 +30,27 @@ async function fixture({ tasks = [], taskOrder = [], reducedMotion = true, failC
       if (method === 'GET') return structuredClone(state);
       if (method === 'POST' && route === '/api/v1/order') {
         if (failReorder) throw new Error('Test order save failed');
-        state.taskOrder = require('../web/task-order.js').moveOrder(state.tasks, state.taskOrder, body.id, body.beforeId);
+        const visible = require('../web/dates.js').tasksForDate(state.tasks, body.date || state.today, state.today);
+        state.taskOrder = require('../web/task-order.js').moveOrder(visible, state.taskOrder, body.id, body.beforeId);
         return { taskOrder: [...state.taskOrder] };
       }
       if (method === 'POST') {
         if (failCreate) throw new Error('Test save failed');
-        const task = { ...body, id: `task-${state.tasks.length}`, date: state.today, completedAt: null };
+        const task = { ...body, id: `task-${state.tasks.length}`, date: body.date || state.today, completedAt: null, completedDate: null };
         state.tasks.push(task); return structuredClone(task);
       }
       if (method === 'PATCH') {
         const task = state.tasks.find(item => route.endsWith(item.id));
-        Object.assign(task, body); return structuredClone(task);
+        Object.assign(task, body);
+        if ('done' in body) { task.completedAt = body.done ? `${state.today}T12:00:00Z` : null; task.completedDate = body.done ? state.today : null; state.taskOrder = state.taskOrder.filter(id => id !== task.id); }
+        return structuredClone(task);
       }
     }
   };
   const context = vm.createContext({ window, document, console, CSS: { escape: value => value }, setTimeout: () => 0, clearTimeout() {}, setInterval: () => 0,
     matchMedia: () => ({ matches: reducedMotion }), performance: { now: () => now },
     requestAnimationFrame(callback) { frames.set(++nextFrame, callback); return nextFrame; }, cancelAnimationFrame(id) { frames.delete(id); } });
-  const source = fs.readFileSync(path.join(root, 'web/task-order.js'), 'utf8') + '\n' + fs.readFileSync(path.join(root, 'web/reorder.js'), 'utf8').replace('export function createTaskReorder', 'function createTaskReorder') + '\n' + fs.readFileSync(path.join(root, 'web/priority.js'), 'utf8').replace('export function createPriorityPicker', 'function createPriorityPicker') + '\n' + fs.readFileSync(path.join(root, 'web/widget.js'), 'utf8').replace(/^import .*\n/gm, '');
+  const source = ['task-order.js', 'dates.js', 'reorder.js', 'priority.js', 'calendar.js', 'widget.js'].map(file => fs.readFileSync(path.join(root, 'web', file), 'utf8').replace(/^export function /gm, 'function ').replace(/^import .*\n/gm, '')).join('\n');
   new vm.Script(source, { filename: 'priority-widget-unit.js' }).runInContext(context);
   await flush();
   const $ = selector => document.querySelector(selector);
@@ -57,7 +60,7 @@ async function fixture({ tasks = [], taskOrder = [], reducedMotion = true, failC
   const advance = milliseconds => { now = milliseconds; const queue = [...frames.values()]; frames.clear(); queue.forEach(callback => callback(now)); };
   expandedCallback(true);
   await flush();
-  return { $, event, open, value, advance, state, calls, document, context };
+  return { $, event, open, value, advance, state, calls, document, context, api: window.ridian };
 }
 
 test('new-task priority opens before typing and the axis previews continuously', async () => {
@@ -182,4 +185,140 @@ test('a failed reorder restores the previous order', async () => {
   assert.deepEqual(displayedIds(f), ['high', 'low', 'done']);
   assert.equal(f.$('#error').textContent, 'Test order save failed');
   assert.equal(f.$('.check').disabled, false);
+});
+
+const plannedTasks = [
+  { id: 'carry', title: 'Carryover', priority: 'normal', date: '2026-10-24', completedAt: null },
+  { id: 'today', title: 'Today task', priority: 'high', date: '2026-10-26', completedAt: null },
+  { id: 'tomorrow', title: 'Tomorrow task', priority: 'low', date: '2026-10-27', completedAt: null },
+  { id: 'later', title: 'Later task', priority: 'urgent', date: '2026-11-05', completedAt: null }
+];
+
+test('date navigation separates future plans from carryover and keeps the orb on today', async () => {
+  const f = await fixture({ tasks: plannedTasks });
+  assert.deepEqual(displayedIds(f), ['today', 'carry']);
+  assert.equal(f.$('#return-today').hidden, true);
+  f.event(f.$('#next-date'), 'click');
+  assert.equal(f.$('#day-title').textContent, 'Tomorrow');
+  assert.deepEqual(displayedIds(f), ['tomorrow']);
+  assert.equal(f.$('#orb-number').textContent, '2');
+  assert.equal(f.$('#progress-label').textContent, '0 / 1');
+  assert.equal(f.$('#return-today').hidden, false);
+  assert.equal(f.$('#return-today').textContent.trim(), '');
+  f.event(f.$('#next-date'), 'click');
+  assert.deepEqual(displayedIds(f), []);
+  assert.equal(f.$('#empty').hidden, false);
+  f.event(f.$('#return-today'), 'click');
+  assert.equal(f.$('#day-title').textContent, 'Today');
+  assert.deepEqual(displayedIds(f), ['today', 'carry']);
+  f.event(f.$('#previous-date'), 'click');
+  assert.equal(f.$('#day-title').textContent, 'Yesterday');
+  assert.deepEqual(displayedIds(f), []);
+});
+
+test('future creation saves the chosen day and priority, preserving drafts while browsing', async () => {
+  const f = await fixture();
+  f.$('#task-input').value = 'Prepare a review'; f.open(); f.value(2); f.event(f.$('.priority-range'), 'change');
+  f.event(f.$('#next-date'), 'click');
+  assert.equal(f.$('#task-input').value, 'Prepare a review');
+  assert.equal(f.$('#draft-priority-label').textContent, 'High');
+  f.event(f.$('#add-form'), 'submit'); await flush();
+  assert.equal(f.state.tasks[0].date, '2026-10-27');
+  assert.equal(f.state.tasks[0].priority, 'high');
+  assert.equal(f.$('.task-text').textContent, 'Prepare a review');
+  assert.equal(f.$('#orb-number').textContent, '·');
+  f.event(f.$('#return-today'), 'click');
+  assert.deepEqual(displayedIds(f), []);
+  f.event(f.$('#next-date'), 'click'); await vm.runInContext('refresh()', f.context);
+  assert.equal(f.$('.task-text').textContent, 'Prepare a review');
+});
+
+test('calendar selects another month, marks scheduled days, and supports keyboard and Escape', async () => {
+  const f = await fixture({ tasks: plannedTasks });
+  f.event(f.$('#choose-date'), 'click');
+  assert.equal(f.$('#date-calendar').hidden, false);
+  assert.equal(f.$('.calendar-month').textContent, 'October 2026');
+  assert.equal(f.document.activeElement.dataset.date, '2026-10-26');
+  assert.equal(f.$('[data-date="2026-10-27"]').classList.contains('has-tasks'), true);
+  f.event(f.$('[data-month="1"]'), 'click');
+  assert.equal(f.$('.calendar-month').textContent, 'November 2026');
+  f.event(f.$('[data-date="2026-11-05"]'), 'click');
+  assert.equal(f.$('#date-calendar').hidden, true);
+  assert.deepEqual(displayedIds(f), ['later']);
+  f.event(f.$('#choose-date'), 'click');
+  f.event(f.document.activeElement, 'keydown', { key: 'ArrowDown' });
+  assert.equal(f.document.activeElement.dataset.date, '2026-11-12');
+  f.event(f.document.activeElement, 'keydown', { key: 'PageUp' });
+  assert.equal(f.document.activeElement.dataset.date, '2026-10-12');
+  f.event(f.document.activeElement, 'keydown', { key: 'Escape' });
+  assert.equal(f.$('#date-calendar').hidden, true);
+  assert.equal(f.$('.sheet').hidden, false);
+  assert.deepEqual(displayedIds(f), ['later']);
+  assert.equal(f.document.activeElement, f.$('#choose-date'));
+});
+
+test('future reordering preserves today order and survives switching dates', async () => {
+  const tasks = [...plannedTasks, { id: 'future-high', title: 'Future high', priority: 'high', date: '2026-10-27', completedAt: null }];
+  const f = await fixture({ tasks, taskOrder: ['carry', 'today'] });
+  f.event(f.$('#next-date'), 'click');
+  assert.deepEqual(displayedIds(f), ['future-high', 'tomorrow']);
+  f.event(f.$('[data-id="future-high"] .reorder-handle'), 'keydown', { key: 'End' }); await flush();
+  assert.deepEqual(displayedIds(f), ['tomorrow', 'future-high']);
+  assert.equal(f.calls.find(call => call.route === '/api/v1/order').body.date, '2026-10-27');
+  f.event(f.$('#return-today'), 'click');
+  assert.deepEqual(displayedIds(f), ['carry', 'today']);
+  f.event(f.$('#next-date'), 'click'); await vm.runInContext('refresh()', f.context);
+  assert.deepEqual(displayedIds(f), ['tomorrow', 'future-high']);
+});
+
+test('today follows midnight while explicitly selected days stay selected', async () => {
+  const f = await fixture({ tasks: plannedTasks });
+  f.state.today = '2026-10-27'; await vm.runInContext('refresh()', f.context);
+  assert.equal(f.$('#day-title').textContent, 'Today');
+  assert.match(f.$('#today-date').textContent, /Oct 27/);
+  assert.deepEqual(displayedIds(f), ['today', 'carry', 'tomorrow']);
+  f.event(f.$('#next-date'), 'click'); f.event(f.$('#next-date'), 'click');
+  f.state.today = '2026-10-28'; await vm.runInContext('refresh()', f.context);
+  assert.match(f.$('#today-date').textContent, /Oct 29/);
+  assert.equal(f.$('#day-title').textContent, 'Tomorrow');
+  f.event(f.$('#return-today'), 'click');
+  assert.match(f.$('#today-date').textContent, /Oct 28/);
+});
+
+test('early completion keeps its planned date and records the actual completion day', async () => {
+  const f = await fixture({ tasks: plannedTasks }); f.event(f.$('#next-date'), 'click');
+  f.event(f.$('.check'), 'click'); await flush();
+  const task = f.state.tasks.find(task => task.id === 'tomorrow');
+  assert.equal(task.date, '2026-10-27'); assert.equal(task.completedDate, '2026-10-26');
+  assert.equal(f.$('.task.done').dataset.id, 'tomorrow');
+  f.event(f.$('#return-today'), 'click');
+  assert.deepEqual(displayedIds(f), ['today', 'carry', 'tomorrow']);
+});
+
+test('in-flight saves lock the destination and a stale refresh cannot erase a new plan', async () => {
+  const f = await fixture(); f.event(f.$('#next-date'), 'click');
+  const original = f.api.request, stale = structuredClone(f.state);
+  let resolveRead, releaseSave;
+  f.api.request = (method, ...args) => method === 'GET'
+    ? new Promise(resolve => { resolveRead = () => resolve(stale); })
+    : new Promise(resolve => { releaseSave = () => resolve(original(method, ...args)); });
+  const refreshing = vm.runInContext('refresh()', f.context);
+  f.$('#task-input').value = 'Saved for tomorrow'; f.event(f.$('#add-form'), 'submit');
+  assert.equal(f.$('#next-date').disabled, true);
+  f.event(f.$('#return-today'), 'click');
+  assert.equal(f.$('#day-title').textContent, 'Tomorrow');
+  releaseSave(); await flush(); resolveRead(); await refreshing;
+  assert.equal(f.$('.task-text').textContent, 'Saved for tomorrow');
+  assert.equal(f.state.tasks[0].date, '2026-10-27');
+  assert.equal(f.$('#next-date').disabled, false);
+});
+
+test('failed future creation and collapse retain the draft and its selected day', async () => {
+  const f = await fixture({ failCreate: true }); f.event(f.$('#next-date'), 'click');
+  f.$('#task-input').value = 'Try later'; f.event(f.$('#add-form'), 'submit'); await flush();
+  f.api.expand(false); f.api.expand(true);
+  assert.equal(f.$('#day-title').textContent, 'Tomorrow');
+  assert.equal(f.$('#task-input').value, 'Try later');
+  assert.equal(f.$('#next-date').disabled, false);
+  assert.equal(f.$('#error').textContent, 'Test save failed');
 });
