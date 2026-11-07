@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ridian · Today</title><link rel="stylesheet" href="widget.css"><script type="module" src="widget.js"></script></head>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ridian · Today</title><link rel="stylesheet" href="widget.css"><link rel="stylesheet" href="habits.css"><script type="module" src="widget.js"></script></head>
 <body>
 <main id="widget" class="widget">
   <button id="orb" class="orb" aria-label="Open today" title="Click to open · Drag to move">
@@ -10,6 +10,7 @@
     <header class="sheet-header" id="drag-handle">
       <div class="date-heading">
         <button type="button" id="choose-date" class="eyebrow date-trigger" aria-label="Choose a date"><span id="today-date"></span><svg viewBox="0 0 12 12" aria-hidden="true"><path d="m3 4.5 3 3 3-3"/></svg></button>
+        <span id="habit-date" class="eyebrow habit-date" hidden></span>
         <div class="day-heading"><h1><span id="day-title">Today</span><span class="heading-dot">.</span></h1><nav class="day-navigation" aria-label="Day navigation">
           <button type="button" id="previous-date" class="icon-button day-step" aria-label="Previous day" title="Previous day"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m12 6-4 4 4 4"/></svg></button>
           <button type="button" id="return-today" class="icon-button today-button" aria-label="Back to today" title="Back to today" hidden><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="4" y="5" width="12" height="11" rx="2"/><path d="M7 3.5v3M13 3.5v3M4 9h12"/><circle cx="10" cy="12.5" r="1" fill="currentColor" stroke="none"/></svg></button>
@@ -18,10 +19,18 @@
       </div>
       <button id="collapse" class="icon-button" aria-label="Collapse" title="Collapse · Esc"><svg viewBox="0 0 20 20"><path d="M5 10h10"/></svg></button>
     </header>
+    <nav class="view-tabs" aria-label="Lists"><button type="button" id="show-tasks" aria-pressed="true" aria-controls="task-panel">Today</button><button type="button" id="show-habits" aria-pressed="false" aria-controls="habit-panel">Habits</button></nav>
+    <div id="task-panel" class="view-panel">
     <div class="list-scroll"><ul id="tasks" class="tasks"></ul><div id="empty" class="empty"><span class="empty-orbit" aria-hidden="true">·</span></div></div>
     <form id="add-form" class="add-form"><span aria-hidden="true">+</span><input id="task-input" placeholder="Add a task…" aria-label="Add a task" maxlength="240" autocomplete="off"><button type="button" id="draft-priority" class="draft-priority normal" aria-label="Priority for new task: Normal"><span class="priority-dot" aria-hidden="true"></span><span id="draft-priority-label">Normal</span><svg viewBox="0 0 12 12" aria-hidden="true"><path d="m3 4.5 3 3 3-3"/></svg></button><button type="submit" class="enter-key" aria-label="Add task" title="Enter to add">↵</button></form>
+    </div>
+    <section id="habit-panel" class="view-panel" aria-label="Habits" hidden>
+      <div class="habit-scroll"><ul id="habits" class="habits"></ul><p id="habits-empty" class="habits-empty">Add your first habit.</p></div>
+      <form id="habit-add" class="add-form"><span aria-hidden="true">+</span><input id="habit-input" placeholder="Add a habit…" aria-label="Add a habit" maxlength="240" autocomplete="off"><button type="submit" class="enter-key" aria-label="Add habit" title="Enter to add">↵</button></form>
+      <div id="habit-detail" class="habit-detail" hidden></div>
+    </section>
     <p id="error" class="error" role="alert" hidden></p>
-    <footer><button id="history" class="text-button" title="History" aria-label="History"><svg viewBox="0 0 16 16"><path d="M3 12V9m5 3V4m5 8V7"/></svg><span id="progress-label"></span></button><button id="menu" class="menu-button" aria-label="More" title="More">···</button></footer>
+    <footer><button id="history" class="text-button" title="History" aria-label="History"><svg viewBox="0 0 16 16"><path d="M3 12V9m5 3V4m5 8V7"/></svg><span id="progress-label"></span></button><span id="habit-progress" class="text-button" aria-label="Today’s habits" hidden><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.5"/><path d="m5.5 8 1.5 1.5 3-3"/></svg><span></span></span><button id="menu" class="menu-button" aria-label="More" title="More">···</button></footer>
   </section>
 </main>
 <div id="announcement" class="sr-only" aria-live="polite"></div>

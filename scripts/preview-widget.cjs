@@ -9,6 +9,12 @@ const webRoot = path.join(temporary, 'web');
 fs.cpSync(path.join(root, 'web'), webRoot, { recursive: true });
 const service = createService({ directory: path.join(temporary, 'data'), webRoot, port: 43128 });
 for (const [title, priority] of [['Review notes', 'urgent'], ['Plan tomorrow', 'high'], ['Read a chapter', 'normal'], ['Take a walk', 'low']]) service.store.add({ title, priority });
+const { addDays } = require('../web/dates.js');
+const previewToday = service.store.today();
+for (const [title, offsets] of [['Read a chapter', [-5, -4, -3, -2, -1, 0]], ['Take a walk', [-6, -4, -2, -1]], ['Write a little', [-3, -2, -1, 0]]]) {
+  const habit = service.store.addHabit({ title, startDate: addDays(previewToday, -14) });
+  for (const offset of offsets) service.store.checkHabit(habit.id, { date: addDays(previewToday, offset), done: true });
+}
 const bridge = `const callbacks = []; window.ridian = {
   async request(method, path, body) {
     const res = await fetch(path, {method, headers: {'Content-Type':'application/json', Authorization: 'Bearer ${service.sessionToken}'}, ...(body === undefined ? {} : {body: JSON.stringify(body)})});

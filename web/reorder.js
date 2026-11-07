@@ -1,5 +1,5 @@
 // Native row dragging provides the moving preview; only the drop mutates data.
-export function createTaskReorder({ list, canStart, move }) {
+export function createTaskReorder({ list, canStart, move, rowSelector = '.task', blockedSelector = 'input,textarea,.check,.priority,.delete' }) {
   const container = list.parentElement;
   const marker = document.createElement('div');
   marker.className = 'order-marker';
@@ -7,7 +7,7 @@ export function createTaskReorder({ list, canStart, move }) {
   marker.setAttribute('aria-hidden', 'true');
   container.append(marker);
   let active = null, scrollFrame = 0, dragAllowed = true, suppressClick = false;
-  const rows = () => [...list.querySelectorAll('.task')];
+  const rows = () => [...list.querySelectorAll(rowSelector)];
 
   function cancel() {
     cancelAnimationFrame(scrollFrame);
@@ -43,11 +43,11 @@ export function createTaskReorder({ list, canStart, move }) {
 
   list.addEventListener('pointerdown', event => {
     suppressClick = false;
-    dragAllowed = event.button === 0 && !event.target.closest('input,textarea,.check,.priority,.delete');
+    dragAllowed = event.button === 0 && !event.target.closest(blockedSelector);
   });
   list.addEventListener('dragstart', event => {
-    const row = event.target.closest('.task');
-    if (!row || !dragAllowed || !canStart() || event.target.closest('input,textarea,.check,.priority,.delete') || row.querySelector('.edit-input')) { event.preventDefault(); return; }
+    const row = event.target.closest(rowSelector);
+    if (!row || !dragAllowed || !canStart() || event.target.closest(blockedSelector) || row.querySelector('.edit-input')) { event.preventDefault(); return; }
     suppressClick = true;
     active = { row, id: row.dataset.id, y: event.clientY, hasTarget: false };
     event.dataTransfer.effectAllowed = 'move';
@@ -86,7 +86,7 @@ export function createTaskReorder({ list, canStart, move }) {
     const handle = event.target.closest('.reorder-handle');
     if (!handle || !['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key) || !canStart()) return;
     event.preventDefault(); event.stopPropagation();
-    const row = handle.closest('.task'), current = rows(), index = current.indexOf(row);
+    const row = handle.closest(rowSelector), current = rows(), index = current.indexOf(row);
     const destination = event.key === 'Home' ? 0 : event.key === 'End' ? current.length - 1 : Math.max(0, Math.min(current.length - 1, index + (event.key === 'ArrowUp' ? -1 : 1)));
     if (destination === index) return;
     const remaining = current.filter(item => item !== row);

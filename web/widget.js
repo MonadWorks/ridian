@@ -3,12 +3,14 @@ import './task-order.js';
 import { createTaskReorder } from './reorder.js';
 import './dates.js';
 import { createCalendar } from './calendar.js';
+import './habits.js';
+import { createHabitView } from './habit-view.js';
 const { orderTasks, moveOrder } = window.RidianOrder;
 const { localDate, validDate, addDays, tasksForDate } = window.RidianDates;
 const api = window.ridian;
 const $ = id => document.getElementById(id);
 let expanded = false, snapshot = { tasks: [], today: '' }, busy = new Set(), refreshInFlight = false, reorderSaving = false;
-let selectedDate = '', adding = false, revision = 0, activeEdit = null;
+let selectedDate = '', adding = false, revision = 0, activeEdit = null, currentView = 'tasks';
 const today = () => snapshot.today || localDate();
 const viewedDate = () => selectedDate || today();
 const viewedTasks = () => tasksForDate(snapshot.tasks, viewedDate(), today());
@@ -28,10 +30,21 @@ priorityPicker.bindDraft($('draft-priority'));
 const taskReorder = createTaskReorder({ list: $('tasks'), canStart: () => !busy.size && !adding && !reorderSaving && !priorityPicker.isOpen && !calendar.isOpen && !document.querySelector('.edit-input'), move: reorderTask });
 const canChangeDate = () => !busy.size && !adding && !reorderSaving && !taskReorder.isDragging && !document.querySelector('.edit-input');
 const calendar = createCalendar({ trigger: $('choose-date'), getDate: viewedDate, getToday: today, getTasks: () => snapshot.tasks, select: selectDate, canOpen: () => { if (!canChangeDate()) return false; priorityPicker.close(); return true; } });
+const habitView = createHabitView({ getData: () => snapshot, request, error, announce, onChange: () => render(undefined, undefined, true), onBusy: value => {
+  if (value) { busy.add('habits'); revision++; } else busy.delete('habits');
+  updateNavigation();
+} });
 function updateNavigation() {
   for (const id of ['choose-date', 'previous-date', 'next-date', 'return-today']) $(id).disabled = !canChangeDate();
   $('previous-date').disabled ||= !validDate(addDays(viewedDate(), -1)) || viewedDate() === '0001-01-01';
   $('next-date').disabled ||= !validDate(addDays(viewedDate(), 1));
+  for (const id of ['show-tasks', 'show-habits']) $(id).disabled = (!!busy.size && !activeEdit) || adding || reorderSaving;
+}
+async function selectView(view) {
+  if (activeEdit && !await finishEditing()) return;
+  if (busy.size || adding || reorderSaving || habitView.busy) return;
+  taskReorder.cancel(); habitView.cancelDrag(); priorityPicker.close(); calendar.close();
+  currentView = view; error(); render();
 }
 function selectDate(date) {
   if (!validDate(date) || date < '0001-01-01' || !canChangeDate()) return;
@@ -45,7 +58,7 @@ function selectDate(date) {
   }
   announce($('today-date').textContent);
 }
-function render(justDone, priorityChanged) {
+function render(justDone, priorityChanged, keepHabitContent = false) {
   if (activeEdit) return;
   const previousPositions = new Map([...document.querySelectorAll('.task')].map(row => [row.dataset.id, row.getBoundingClientRect().top]));
   if (selectedDate === today()) selectedDate = '';
@@ -56,16 +69,26 @@ function render(justDone, priorityChanged) {
   $('orb-number').textContent = todayPending || (todayTasks.length ? '✓' : '·');
   $('orb').setAttribute('aria-label', `Open task list, ${todayPending} pending today`);
   $('progress-ring').style.strokeDashoffset = String(163.363 * (todayTasks.length ? todayPending / todayTasks.length : 1));
+  const inHabits = currentView === 'habits';
+  $('task-panel').hidden = inHabits; $('habit-panel').hidden = !inHabits;
+  $('show-tasks').setAttribute('aria-pressed', String(!inHabits)); $('show-habits').setAttribute('aria-pressed', String(inHabits));
+  $('choose-date').hidden = inHabits; $('habit-date').hidden = !inHabits;
+  document.querySelector('.day-navigation').hidden = inHabits;
+  const dueHabits = (snapshot.habits || []).filter(habit => window.RidianHabits.isDue(habit, today()) || habit.checkins.includes(today()));
   $('progress-label').textContent = visible.length ? `${done} / ${visible.length}` : '';
+  $('history').hidden = inHabits; $('habit-progress').hidden = !inHabits;
+  $('habit-progress').querySelector('span').textContent = dueHabits.length ? `${dueHabits.filter(habit => habit.checkins.includes(today())).length} / ${dueHabits.length}` : '';
   const dateObject = new Date(`${date}T12:00:00`);
   $('today-date').textContent = dateObject.toLocaleDateString('en-US', { month: 'short', day: 'numeric', weekday: 'short', ...(date.slice(0, 4) !== today().slice(0, 4) ? { year: 'numeric' } : {}) });
+  $('habit-date').textContent = new Date(`${today()}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', weekday: 'short' });
   const heading = date === today() ? 'Today' : date === addDays(today(), 1) ? 'Tomorrow' : date === addDays(today(), -1) ? 'Yesterday' : dateObject.toLocaleDateString('en-US', { weekday: 'long' });
-  $('day-title').textContent = heading;
-  document.querySelector('.sheet').setAttribute('aria-label', `${heading}, ${date}`);
+  $('day-title').textContent = inHabits ? 'Habits' : heading;
+  document.querySelector('.sheet').setAttribute('aria-label', inHabits ? `Habits, ${today()}` : `${heading}, ${date}`);
   $('choose-date').setAttribute('aria-label', `Choose a date, ${date}`);
   $('return-today').hidden = date === today();
   $('task-input').setAttribute('aria-label', date === today() ? 'Add a task' : `Add a task for ${date}`);
   updateNavigation();
+  if (inHabits) { if (!keepHabitContent) habitView.render(); return; }
   $('empty').hidden = visible.length > 0;
   const fragment = document.createDocumentFragment();
   for (const task of visible) {
@@ -116,10 +139,10 @@ async function reorderTask(id, beforeId) {
   finally { reorderSaving = false; render(); }
 }
 async function refresh() {
-  if (refreshInFlight || priorityPicker.isOpen || calendar.isOpen || taskReorder.isDragging || reorderSaving || adding || busy.size || document.querySelector('.edit-input')) return;
+  if (refreshInFlight || habitView.interacting || priorityPicker.isOpen || calendar.isOpen || taskReorder.isDragging || reorderSaving || adding || busy.size || document.querySelector('.edit-input')) return;
   refreshInFlight = true;
   const startedRevision = revision;
-  try { const next = await request('GET', '/api/v1/history'); if (startedRevision !== revision || priorityPicker.isOpen || calendar.isOpen || taskReorder.isDragging || reorderSaving || adding || busy.size || document.querySelector('.edit-input')) return; if (JSON.stringify(snapshot) !== JSON.stringify({ ...next, exportedAt: snapshot.exportedAt })) { snapshot = next; render(); } error(); }
+  try { const next = await request('GET', '/api/v1/history'); if (startedRevision !== revision || habitView.interacting || priorityPicker.isOpen || calendar.isOpen || taskReorder.isDragging || reorderSaving || adding || busy.size || document.querySelector('.edit-input')) return; if (JSON.stringify(snapshot) !== JSON.stringify({ ...next, exportedAt: snapshot.exportedAt })) { snapshot = next; render(); } error(); }
   catch(e) { error(e.message); } finally { refreshInFlight = false; }
 }
 async function setPriority(task, value) {
@@ -218,18 +241,21 @@ async function edit(task, label) {
 }
 async function changeExpanded(value) {
   taskReorder.cancel();
+  habitView.cancelDrag();
   priorityPicker.close();
   calendar.close();
   if (!value) { document.querySelector('.sheet').classList.add('closing'); await new Promise(r => setTimeout(r, matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 150)); }
   if (api) await api.expand(value); else applyExpanded(value);
 }
 function applyExpanded(value) {
-  if (!value) { priorityPicker.close(); calendar.close(); taskReorder.cancel(); }
+  if (!value) { priorityPicker.close(); calendar.close(); taskReorder.cancel(); habitView.cancelDrag(); }
   expanded = value; $('orb').hidden = value; document.querySelector('.sheet').hidden = !value; document.querySelector('.sheet').classList.remove('closing');
-  if (value) { render(); refresh(); setTimeout(() => { if (!activeEdit && !calendar.isOpen && !priorityPicker.isOpen) $('task-input').focus(); }, 200); } else $('orb').focus();
+  if (value) { render(); refresh(); setTimeout(() => { if (currentView === 'habits') habitView.focus(); else if (!activeEdit && !calendar.isOpen && !priorityPicker.isOpen) $('task-input').focus(); }, 200); } else $('orb').focus();
 }
 api?.onExpanded(applyExpanded);
-api?.onToday?.(() => selectDate(today()));
+api?.onToday?.(async () => { await selectView('tasks'); selectDate(today()); });
+$('show-tasks').onclick = () => selectView('tasks');
+$('show-habits').onclick = () => selectView('habits');
 $('collapse').onclick = () => changeExpanded(false);
 $('menu').onclick = () => api?.menu();
 $('history').onclick = () => api?.history();

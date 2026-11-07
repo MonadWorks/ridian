@@ -1,0 +1,80 @@
+/* The same paper surface, with one quiet row of navigation. */
+.sheet-header{padding-bottom:7px}
+.view-tabs{display:flex;gap:18px;padding:0 24px;margin:0 0 10px;flex:none}
+.view-tabs button{position:relative;padding:3px 0 7px;font-size:10px;letter-spacing:.02em;color:#8b9487}
+.view-tabs button[aria-pressed="true"]{color:#50664f}
+.view-tabs button[aria-pressed="true"]:after{content:"";position:absolute;left:0;right:0;bottom:0;height:1.5px;border-radius:2px;background:#94a489}
+.view-tabs button:hover{color:#50664f}
+.view-tabs button:disabled{opacity:.5;cursor:default}
+.view-panel{display:flex;flex:1;flex-direction:column;min-height:0}
+.view-panel[hidden],.day-navigation[hidden],.date-trigger[hidden],.habit-date[hidden],.habit-scroll[hidden],.habit-detail[hidden],#habit-add[hidden]{display:none}
+.text-button[hidden]{display:none}
+.habit-date{display:block;min-height:24px;line-height:24px;margin:0 0 3px;letter-spacing:.045em;color:#788374}
+.habit-scroll,.habit-detail{position:relative;flex:1;min-height:0;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#d7ded3 transparent;padding:0 23px 10px}
+.habits{list-style:none;padding:0;margin:0}
+.habit{position:relative;padding:9px 0 17px}
+.habit+.habit{border-top:1px solid #eff1eb;padding-top:15px}
+.habit-heading{display:flex;align-items:baseline;gap:10px;margin-bottom:9px}
+.habit-title{flex:1;min-width:0;text-align:left;font-size:13px;line-height:1.5;padding:0;color:#4b534c;overflow-wrap:anywhere;white-space:pre-wrap}
+.habit-title:hover,.habit-detail-title:hover{color:#344c3a}
+.habit-streak{flex:none;font-size:10px;color:#7b8e72;font-variant-numeric:tabular-nums}
+.habit-week{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}
+.habit-day{position:relative;padding:0;display:flex;align-items:center;flex-direction:column;gap:6px;border-radius:8px;color:#7f8a79;font-variant-numeric:tabular-nums}
+.habit-weekday{font-size:8px;line-height:12px;color:#8b9585}
+.habit-dot{position:relative;display:grid;place-items:center;width:21px;height:21px;border:1px solid #dce2d6;border-radius:50%;background:#f8faf5;color:#fffef7;transition:background 180ms,border-color 180ms,transform 180ms var(--ease)}
+.habit-dot svg{width:11px;height:11px;stroke-width:1.6}
+.habit-dot path{stroke-dasharray:18;stroke-dashoffset:18}
+.habit-day.checked .habit-dot{background:#829780;border-color:#829780}
+.habit-day.checked .habit-dot path{stroke-dashoffset:0}
+.habit-day[aria-current="date"] .habit-dot{border-color:#a8b69b;box-shadow:0 0 7px 2px #f1dfac54}
+.habit-day:not(:disabled):hover .habit-dot{border-color:#829780;transform:scale(1.08)}
+.habit-day:not(:disabled):active .habit-dot{transform:scale(.92)}
+.habit-day.rest-day:not(.checked) .habit-dot{border-style:dashed;background:transparent;border-color:#e1e5dc}
+.habit-day:disabled{cursor:default}
+.habit-day:disabled:not(.checked){opacity:.45}
+.habit-day.just-checked .habit-dot:after{content:"";position:absolute;inset:-2px;border:1px solid #bfcaab;border-radius:50%;animation:ripple 500ms var(--ease) both;pointer-events:none}
+.habit-day.just-checked .habit-dot path{animation:draw 280ms var(--ease) both}
+.habit .reorder-handle{top:9px;left:-18px}
+.habit:hover .reorder-handle,.habit:focus-within .reorder-handle{opacity:.7}
+.habit.being-dragged{opacity:.23}
+.habit-scroll .order-marker{left:23px;right:23px}
+.habits-empty{color:#8b9584;font-size:11px;line-height:1.6;margin:58px 0;text-align:center}
+.habits-empty[hidden]{display:none}
+.habit-detail-heading{display:flex;align-items:center;gap:5px;margin:1px -4px 10px}
+.habit-detail-heading .icon-button{width:25px;height:28px;flex:none}
+.habit-detail-heading svg{width:16px;height:16px}
+.habit-detail-title{flex:1;min-width:0;font-size:13px;font-weight:500;line-height:1.5;text-align:left;overflow-wrap:anywhere;padding:0 4px;color:#4b534c}
+.habit-stats{display:flex;gap:25px;padding:1px 6px 12px;margin-bottom:6px;border-bottom:1px solid #edf0e7}
+.habit-stats>div{display:flex;align-items:baseline;gap:5px}
+.habit-stats strong{font-size:16px;font-weight:500;font-variant-numeric:tabular-nums;color:#61775b}
+.habit-stats span{font-size:9px;color:#8b9584}
+.habit-detail .calendar-header{margin-bottom:2px}
+.habit-detail .calendar-month{font-size:11px}
+.habit-detail .calendar-week{line-height:16px;margin-bottom:3px}
+.habit-calendar{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}
+.habit-calendar-day{height:27px;justify-content:center;font-size:10px;border-radius:50%;width:27px;justify-self:center;color:#69795f;transition:background 160ms,color 160ms}
+.habit-calendar-day:not(:disabled):hover{background:#edf2e8}
+.habit-calendar-day.checked,.habit-calendar-day.checked:hover{background:#829780;color:#fffef7}
+.habit-calendar-day[aria-current="date"]{box-shadow:inset 0 0 0 1px #acbba1,0 0 7px #f0dfae80}
+.habit-calendar-day.outside-month{opacity:.35}
+.habit-calendar-day.rest-day:not(.checked){color:#b1b8a9}
+.habit-calendar-day.just-checked{animation:habit-mark 280ms var(--ease)}
+.habit-since{display:flex;align-items:center;justify-content:space-between;min-height:32px;font-size:9px;color:#97a08e;padding:2px 5px}
+.habit-since .icon-button{width:24px;height:24px}
+.habit-since svg{width:15px;height:15px}
+.habit-edit-form{padding:8px 0}
+.habit-edit-form label,.habit-edit-form legend{display:block;font-size:10px;color:#8b9584;margin-bottom:7px}
+.habit-edit-form input{width:100%;padding:7px 0;border:0;border-bottom:1px solid #c5d0bb;background:transparent;font-size:13px;color:#4b534c;user-select:text}
+.habit-edit-form input:focus-visible{outline:0;border-color:#7e9575}
+.habit-edit-form fieldset{padding:0;margin:22px 0 18px;border:0;min-width:0}
+.habit-weekdays{display:flex;justify-content:space-between;gap:4px}
+.habit-weekday-choice{height:29px;width:29px;flex:none;border-radius:50%;font-size:10px;color:#8b9584;background:#f1f4ec}
+.habit-weekday-choice[aria-pressed="true"]{background:#829780;color:#fffef7}
+.habit-edit-actions{display:flex;justify-content:flex-end;gap:14px;font-size:11px;align-items:center}
+.habit-cancel{color:#89937f;padding:7px 0}
+.habit-save{color:#53694d;background:#edf2e7;border-radius:12px;padding:7px 14px}
+.habit-delete-area{display:flex;align-items:center;gap:12px;margin-top:24px;padding-top:10px;border-top:1px solid #eff1eb}
+.habit-delete,.habit-keep{font-size:10px;color:#9d7e72;padding:6px 0}
+.habit-keep{color:#7b8e72}
+#habit-panel button:focus-visible{outline-width:1.5px;outline-offset:2px}
+@keyframes habit-mark{from{transform:scale(.8);opacity:.6}to{transform:scale(1);opacity:1}}

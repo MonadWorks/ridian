@@ -8,10 +8,11 @@ A quiet daily task list that floats on your desktop. A white orb, a soft golden 
 - **Priorities, with room to rearrange.** A horizontal slider with four priority levels. Drag tasks into any order to override the defaults.
 - **A record of each day.** An annual activity heatmap, daily lists, and simple completion statistics.
 - **Ready for your AI.** A local HTTP API, separate read and write keys, and recurring tasks based on intervals, weekdays, or specific dates.
+- **Build a habit.** Daily check-ins, seven-day traces, personal streaks, and a monthly record in the same floating panel.
 
 ## Preview
 
-These earlier English interface screenshots show empty states without personal tasks. The current app also includes a priority slider and free task reordering, which are not shown here.
+These are early screenshots of the empty English interface, with no personal tasks. The current app also includes priority controls, free ordering, date planning, inline editing, and Habits, which are not shown here.
 
 <p align="center">
   <img src="docs/assets/widget-preview.png" width="356" alt="An earlier empty Ridian floating task panel in white with a soft golden glow">
@@ -58,13 +59,27 @@ The [online history page](https://ridian-journal.vercel.app) can connect to Ridi
 
 History includes an annual heatmap, daily task lists, total completions, active days, and the longest streak. The heatmap counts tasks on the day they were actually completed. Planned dates and later completion dates are retained separately. Undoing a completion also updates the statistics.
 
+## Habits
+
+Use the **Today / Habits** tabs below the heading. Habits shares the existing white surface, warm rim, and quiet sage accents. The orb continues to show today's pending tasks; switching views keeps task planning and input drafts intact.
+
+- Type a name in **Add a habit…** and press Enter. New habits repeat daily and begin today.
+- Each row shows the name, current streak, and seven daily circles ending with today. Click a circle to check in or undo. Today's circle has a pale warm ring; completed days fill with sage and a brief check animation. Rows stay in place after completion.
+- Click a name to open its month calendar, with **Current**, **Total**, and **Best** counts. Click an eligible past date to backfill or undo a check-in. Dates before the habit's start, future dates, and rest days are disabled. Already recorded days can always be undone. Month arrows browse the calendar; the calendar icon returns to the current month. Escape goes back to the list.
+- Click the name or pencil in the detail view to edit the name and repeating weekdays, then **Save**. All seven days are selected by default. Schedule changes apply from today; previous days keep their original schedule. Escape or Cancel discards the edit; failed saves keep the draft. Delete is available here and requires a second click, removing that habit and its records.
+- Drag the name or the hover handle to arrange habits. With the handle focused, use **↑ / ↓**, **Home**, or **End**. Manual order survives refreshes and restarts.
+
+The current streak counts consecutive completed **scheduled days**. Today stays open until the local day ends, so an unfinished today preserves yesterday's streak. Rest days are skipped. A missed scheduled day resets the current streak while retaining total and best records. Backfilling or undoing recalculates these counts. Total counts all recorded days, including records retained after a schedule change. Each habit has at most one check-in per date.
+
+Habit records live in the same local journal and are included in JSON exports and daily backups. The desktop month view displays habit history; the web journal's heatmap and aggregate statistics continue to describe tasks.
+
 ## Data and connections
 
 Data is stored in `~/Library/Application Support/Ridian/`:
 
 | File | Contents |
 | --- | --- |
-| `journal.json` | Tasks, recurring strategies, and manual order. Writes use a temporary file, `fsync`, and atomic replacement. |
+| `journal.json` | Tasks, recurring strategies, habits with dated check-ins and schedule history, and manual order. Writes use a temporary file, `fsync`, and atomic replacement. |
 | `backups/YYYY-MM-DD.json` | A backup made before the first change each day. |
 | `connection.json` | The local HTTP address, a read-only `readToken`, and a writable `writeToken`. File permissions are `0600`. |
 | `preferences.json` | The floating orb's position. |
@@ -83,7 +98,7 @@ Copy a read-only or read/write configuration from Ridian's **AI access** menu. A
 | --- | --- | --- |
 | GET | `/api/v1/today` | Today's tasks, including unfinished tasks from earlier days |
 | GET | `/api/v1/tasks?date=2026-10-26` | Tasks planned or completed on a date; omit `date` for all tasks |
-| GET | `/api/v1/history` | Full records, strategies, time zone, and current local date |
+| GET | `/api/v1/history` | Full task and habit records, strategies, time zone, and current local date |
 | GET | `/api/v1/export` | Full JSON backup |
 | POST | `/api/v1/tasks` | Add a task |
 | PATCH | `/api/v1/tasks/:id` | Update title, priority, planned date, or completion state |
@@ -92,6 +107,10 @@ Copy a read-only or read/write configuration from Ridian's **AI access** menu. A
 | DELETE | `/api/v1/order` | Restore the default order |
 | GET / POST | `/api/v1/strategies` | List / create recurring strategies |
 | PATCH / DELETE | `/api/v1/strategies/:id` | Update / delete a strategy |
+| GET / POST | `/api/v1/habits` | List / create habits |
+| PATCH / DELETE | `/api/v1/habits/:id` | Update name or weekdays / delete a habit and its records |
+| POST | `/api/v1/habits/:id/checkins` | Check in or undo: `{"date":"2026-10-26","done":true}`; date defaults to today |
+| POST | `/api/v1/habits/order` | Move a habit: `{"id":"habit-id","beforeId":"target-id"}`; `beforeId:null` moves it to the end |
 
 Write requests using a read-only key return `403`. Invalid keys return `401`. Successful creation and updates return `200` with JSON.
 
@@ -110,6 +129,14 @@ Update a task:
 ```
 
 Use `done:false` to undo completion. You can update `title`, `date`, and `priority` independently.
+
+Create a habit:
+
+```json
+{"title":"Read a chapter","weekdays":[0,1,2,3,4,5,6],"startDate":"2026-10-26"}
+```
+
+`weekdays` defaults to every day and uses `0` for Sunday through `6` for Saturday. `startDate` defaults to today and accepts dates from `2000-01-01` through today, allowing an AI to initialize an earlier habit before backfilling. PATCH accepts `title` and `weekdays`; changing weekdays records a new schedule effective today. Check-ins accept `done:true` or `done:false` and a date between the start and today. New check-ins follow the schedule for that date; existing check-ins can be undone on rest days. Repeating `done:true` for an already checked day is idempotent. GET returns `{habits, today}`; each habit contains `id`, `title`, `startDate`, `schedules` (`from` and `weekdays`), `checkins` (date strings), `createdAt`, and `updatedAt`. The array order is the saved display order.
 
 Review every three days:
 
